@@ -1,0 +1,51 @@
+name: Release
+
+# Publishes a GitHub release with the Windows program when a version tag is pushed:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        shell: pwsh
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Build
+        run: cargo build --release --locked
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/DiskCraft.exe dist/DiskCraft.exe
+          Compress-Archive -Path dist/DiskCraft.exe -DestinationPath "dist/DiskCraft-$env:TAG-windows-x64.zip"
+          Get-ChildItem dist -File | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)"
+          } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+      - name: Publish release
+        shell: pwsh
+        run: |
+          $files = @("dist/DiskCraft.exe", "dist/DiskCraft-$env:TAG-windows-x64.zip", "dist/SHA256SUMS.txt")
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG @files --clobber
+          } else {
+            gh release create $env:TAG @files --title $env:TAG --generate-notes
+          }

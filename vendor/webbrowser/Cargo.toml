@@ -1,0 +1,9 @@
+[package]
+name = "webbrowser"
+version = "1.0.1"
+edition = "2021"
+description = "Small local replacement: opens links with the Windows shell (no extra system libraries needed)."
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "lib.rs"

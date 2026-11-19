@@ -1,0 +1,9 @@
+/target/
+/shots/
+/tools/
+# local machine settings (contains a path specific to one PC)
+/.cargo/config.toml
+# study notes from reverse engineering: not published
+/MECHANICS.md
+/mechanics.json
+*.log
