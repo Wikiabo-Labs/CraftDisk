@@ -7,12 +7,12 @@ use crate::rawio::{seed, Dev, XorShift};
 pub fn format(dev: &mut Dev, size: u64, ss: u64, hidden: u64, label: &str, cluster: u32, progress: &mut dyn FnMut(f32)) -> Result<(), String> {
     let total = size / ss;
     if total > 0xFFFF_FFFF {
-        return Err("FAT32 est limité à 2^32 secteurs (2 To).".into());
+        return Err(crate::tr!("FAT32 est limité à 2^32 secteurs (2 To).", "FAT32 is limited to 2^32 sectors (2 TB).").into());
     }
     let cluster = if cluster == 0 { fat32_default_cluster(size) } else { cluster } as u64;
     let spc = (cluster / ss).max(1);
     if spc > 128 || !spc.is_power_of_two() {
-        return Err("Taille de cluster non valide pour FAT32.".into());
+        return Err(crate::tr!("Taille de cluster non valide pour FAT32.", "Cluster size not valid for FAT32.").into());
     }
     let reserved: u64 = 32;
     let nfats: u64 = 2;
@@ -21,14 +21,14 @@ pub fn format(dev: &mut Dev, size: u64, ss: u64, hidden: u64, label: &str, clust
     let fat_secs = fat_secs.div_ceil(1).max(1);
     let data_start = reserved + nfats * fat_secs;
     if data_start >= total {
-        return Err("Volume trop petit pour FAT32.".into());
+        return Err(crate::tr!("Volume trop petit pour FAT32.", "Volume too small for FAT32.").into());
     }
     let clusters = (total - data_start) / spc;
     if clusters < crate::model::FAT32_MIN_CLUSTERS {
-        return Err("Volume trop petit pour FAT32 avec cette taille de cluster : choisissez un cluster plus petit.".into());
+        return Err(crate::tr!("Volume trop petit pour FAT32 avec cette taille de cluster : choisissez un cluster plus petit.", "Volume too small for FAT32 with this cluster size: choose a smaller cluster.").into());
     }
     if clusters > 0x0FFF_FFF5 {
-        return Err("Trop de clusters : choisissez un cluster plus grand.".into());
+        return Err(crate::tr!("Trop de clusters : choisissez un cluster plus grand.", "Too many clusters: choose a larger cluster.").into());
     }
     let s = ss as usize;
     let mut vol_id = [0u8; 4];

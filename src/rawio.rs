@@ -41,7 +41,7 @@ fn ioctl(f: &File, code: u32, out: &mut [u8]) -> std::io::Result<u32> {
 }
 #[cfg(not(windows))]
 fn ioctl(_f: &File, _code: u32, _out: &mut [u8]) -> std::io::Result<u32> {
-    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Windows seulement"))
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, crate::tr!("Windows seulement", "Windows only")))
 }
 
 impl Dev {
@@ -50,7 +50,7 @@ impl Dev {
         o.read(true).write(write);
         #[cfg(windows)]
         o.share_mode(3); // FILE_SHARE_READ | FILE_SHARE_WRITE
-        let file = o.open(path).map_err(|e| format!("Ouverture de {path} impossible : {e}"))?;
+        let file = o.open(path).map_err(|e| crate::trf!("Ouverture de {path} impossible : {e}", "Cannot open {path}: {e}"))?;
         Ok(Dev { file, path: path.to_string() })
     }
     pub fn disk(n: u32, write: bool) -> Result<Dev, String> {
@@ -58,7 +58,7 @@ impl Dev {
     }
     pub fn len(&self) -> Result<u64, String> {
         let mut b = [0u8; 8];
-        ioctl(&self.file, IOCTL_DISK_GET_LENGTH_INFO, &mut b).map_err(|e| format!("Taille de {} inconnue : {e}", self.path))?;
+        ioctl(&self.file, IOCTL_DISK_GET_LENGTH_INFO, &mut b).map_err(|e| crate::trf!("Taille de {} inconnue : {e}", "Size of {} unknown: {e}", self.path))?;
         Ok(u64::from_le_bytes(b))
     }
     /// Take the volume away from Windows so it can be written raw.
@@ -68,11 +68,11 @@ impl Dev {
         while ioctl(&self.file, FSCTL_LOCK_VOLUME, &mut []).is_err() {
             tries += 1;
             if tries > 10 {
-                return Err("Le volume est utilisé par un programme : fermez-le et réessayez.".into());
+                return Err(crate::tr!("Le volume est utilisé par un programme : fermez-le et réessayez.", "The volume is being used by a program: close it and try again.").into());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
-        ioctl(&self.file, FSCTL_DISMOUNT_VOLUME, &mut []).map_err(|e| format!("Démontage impossible : {e}"))?;
+        ioctl(&self.file, FSCTL_DISMOUNT_VOLUME, &mut []).map_err(|e| crate::trf!("Démontage impossible : {e}", "Cannot dismount: {e}"))?;
         Ok(())
     }
     pub fn update_properties(&self) {
@@ -80,11 +80,11 @@ impl Dev {
     }
     pub fn read_at(&mut self, pos: u64, buf: &mut [u8]) -> Result<(), String> {
         self.file.seek(SeekFrom::Start(pos)).map_err(|e| e.to_string())?;
-        self.file.read_exact(buf).map_err(|e| format!("Lecture à {pos} sur {} : {e}", self.path))
+        self.file.read_exact(buf).map_err(|e| crate::trf!("Lecture à {pos} sur {} : {e}", "Read at {pos} on {}: {e}", self.path))
     }
     pub fn write_at(&mut self, pos: u64, buf: &[u8]) -> Result<(), String> {
         self.file.seek(SeekFrom::Start(pos)).map_err(|e| e.to_string())?;
-        self.file.write_all(buf).map_err(|e| format!("Écriture à {pos} sur {} : {e}", self.path))
+        self.file.write_all(buf).map_err(|e| crate::trf!("Écriture à {pos} sur {} : {e}", "Write at {pos} on {}: {e}", self.path))
     }
 }
 

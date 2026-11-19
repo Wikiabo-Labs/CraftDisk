@@ -59,7 +59,7 @@ pub fn run_ps_file(script: &str, on_line: &mut dyn FnMut(&str)) -> Result<(), St
     let utf16: Vec<u8> = body.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
     let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
     if encoded.len() > 30_000 {
-        return Err("Le script PowerShell est trop long.".into());
+        return Err(crate::tr!("Le script PowerShell est trop long.", "The PowerShell script is too long.").into());
     }
     let mut cmd = std::process::Command::new("powershell.exe");
     cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded]);
@@ -69,10 +69,10 @@ pub fn run_ps_file(script: &str, on_line: &mut dyn FnMut(&str)) -> Result<(), St
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let mut child = cmd.spawn().map_err(|e| format!("PowerShell introuvable : {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| crate::trf!("PowerShell introuvable : {e}", "PowerShell not found: {e}"))?;
     let (Some(stdout), Some(mut stderr)) = (child.stdout.take(), child.stderr.take()) else {
         let _ = child.kill();
-        return Err("Sortie de PowerShell inaccessible.".into());
+        return Err(crate::tr!("Sortie de PowerShell inaccessible.", "PowerShell output is not available.").into());
     };
     // stderr must be read all the time, or PowerShell blocks when its pipe fills up. Keep only the tail.
     let err_reader = std::thread::spawn(move || {
@@ -112,9 +112,9 @@ pub fn run_ps_file(script: &str, on_line: &mut dyn FnMut(&str)) -> Result<(), St
     } else if !err_text.is_empty() {
         Err(err_text)
     } else if !stderr_tail.is_empty() {
-        Err(format!("La commande a échoué (code {:?}) : {stderr_tail}", status.code()))
+        Err(crate::trf!("La commande a échoué (code {:?}) : {stderr_tail}", "The command failed (code {:?}): {stderr_tail}", status.code()))
     } else {
-        Err(format!("La commande a échoué (code {:?}).", status.code()))
+        Err(crate::trf!("La commande a échoué (code {:?}).", "The command failed (code {:?}).", status.code()))
     }
 }
 
@@ -154,11 +154,11 @@ fn make_shadow(letter: char, log: &mut Log) -> Option<Shadow> {
             let (path, id) = v.split_once('|')?;
             let dev = Dev::open(path, false).ok()?;
             let len = dev.len().unwrap_or(0);
-            log.info(&format!("Instantané de {letter}: créé : les fichiers ouverts sont copiés dans un état cohérent."));
+            log.info(&crate::trf!("Instantané de {letter}: créé : les fichiers ouverts sont copiés dans un état cohérent.", "Snapshot of {letter}: created: open files are copied in a consistent state."));
             Some(Shadow { id: id.to_string(), dev, len })
         }
         Err(e) => {
-            log.info(&format!("Instantané de {letter}: impossible ({e}) : copie directe."));
+            log.info(&crate::trf!("Instantané de {letter}: impossible ({e}) : copie directe.", "Snapshot of {letter}: not possible ({e}): direct copy."));
             None
         }
     }
@@ -172,7 +172,7 @@ fn clone_disk(src: u32, dst: u32, ss: u64, parts: &[SrcPart], extent: u64, log: 
     let mut sdev = Dev::disk(src, false)?;
     let mut ddev = Dev::disk(dst, true)?;
     if ddev.len()? < extent {
-        return Err("Le disque cible est trop petit.".into());
+        return Err(crate::tr!("Le disque cible est trop petit.", "The target disk is too small.").into());
     }
     let mut shadows: Vec<(SrcPart, Shadow)> = Vec::new();
     for p in parts {
@@ -259,7 +259,7 @@ fn overwrite(dev: &mut Dev, start: u64, len: u64, passes: u8, log: &mut Log) -> 
     let mut buf = vec![0u8; CHUNK as usize];
     for k in 0..passes {
         let last = k + 1 == passes;
-        log.info(&format!("Passe {} sur {passes} ({})", k + 1, if last { "zéros" } else { "données aléatoires" }));
+        log.info(&crate::trf!("Passe {} sur {passes} ({})", "Pass {} of {passes} ({})", k + 1, if last { crate::tr!("zéros", "zeros") } else { crate::tr!("données aléatoires", "random data") }));
         let mut pos = 0u64;
         while pos < len {
             let n = CHUNK.min(len - pos);
@@ -290,7 +290,7 @@ fn move_part(disk: u32, offset: u64, size: u64, new_offset: u64, ss: u64, log: &
         }
         Err(_) => None,
     };
-    log.info("Déplacement en cours : ne coupez surtout pas le courant avant la fin.");
+    log.info(crate::tr!("Déplacement en cours : ne coupez surtout pas le courant avant la fin.", "Moving: do not cut the power before it finishes."));
     let mut d = Dev::disk(disk, true)?;
     let mut buf = vec![0u8; CHUNK as usize];
     let mut done = 0u64;
@@ -307,7 +307,7 @@ fn move_part(disk: u32, offset: u64, size: u64, new_offset: u64, ss: u64, log: &
     crate::gpt::move_entry(disk, ss, offset / ss, new_offset / ss)?;
     drop(vol);
     log.pct(1.0);
-    log.info("Partition déplacée.");
+    log.info(crate::tr!("Partition déplacée.", "Partition moved."));
     Ok(())
 }
 
@@ -326,7 +326,7 @@ fn surface_test(disk: u32, offset: u64, size: u64, ss: u64, log: &mut Log) -> Re
                 if dev.read_at(offset + pos + s, &mut buf[..ss as usize]).is_err() {
                     bad += 1;
                     if bad <= 200 {
-                        log.info(&format!("Secteur illisible : {}", (offset + pos + s) / ss));
+                        log.info(&crate::trf!("Secteur illisible : {}", "Unreadable sector: {}", (offset + pos + s) / ss));
                     }
                 }
                 s += ss;
@@ -336,9 +336,9 @@ fn surface_test(disk: u32, offset: u64, size: u64, ss: u64, log: &mut Log) -> Re
         log.pct(pos as f32 / total as f32);
     }
     if bad == 0 {
-        log.info("Test de surface terminé : aucun secteur défectueux.");
+        log.info(crate::tr!("Test de surface terminé : aucun secteur défectueux.", "Surface test finished: no bad sectors."));
     } else {
-        log.info(&format!("Test de surface terminé : {bad} secteur(s) défectueux. Sauvegardez vos données."));
+        log.info(&crate::trf!("Test de surface terminé : {bad} secteur(s) défectueux. Sauvegardez vos données.", "Surface test finished: {bad} bad sector(s). Back up your data."));
     }
     Ok(())
 }
@@ -441,14 +441,13 @@ fn live_disks() -> Result<Vec<LiveDisk>, String> {
 /// Every disk the plan was made for must still be the same one under the same number.
 fn check_disks(expected: &[DiskId], live: &[LiveDisk]) -> Result<(), String> {
     if expected.is_empty() {
-        return Err("Le plan ne contient aucune identité de disque : exécution refusée.".into());
+        return Err(crate::tr!("Le plan ne contient aucune identité de disque : exécution refusée.", "The plan contains no disk identity: execution refused.").into());
     }
     for e in expected {
         match live.iter().find(|d| d.number == e.number) {
-            None => return Err(format!("Le disque {} n'existe plus : relancez DiskCraft et recommencez.", e.number)),
+            None => return Err(crate::trf!("Le disque {} n'existe plus : relancez DiskCraft et recommencez.", "Disk {} no longer exists: restart DiskCraft and try again.", e.number)),
             Some(d) if d.size != e.size || d.uid != e.uid || d.model != e.model => {
-                return Err(format!(
-                    "Le disque {} n'est plus le même qu'à l'aperçu (débranché, rebranché ou renuméroté) : rien n'a été modifié. Relancez DiskCraft.",
+                return Err(crate::trf!("Le disque {} n'est plus le même qu'à l'aperçu (débranché, rebranché ou renuméroté) : rien n'a été modifié. Relancez DiskCraft.", "Disk {} is no longer the same as in the preview (unplugged, plugged back in or renumbered): nothing was changed. Restart DiskCraft.",
                     e.number
                 ));
             }
@@ -469,7 +468,7 @@ fn check_destructive(steps: &[Step], live: &[LiveDisk]) -> Result<(), String> {
         };
         if let Some(n) = target {
             if live.iter().find(|d| d.number == n).map_or(true, |d| d.system) {
-                return Err(format!("Le disque {n} est le disque de Windows (ou n'existe plus) : opération refusée."));
+                return Err(crate::trf!("Le disque {n} est le disque de Windows (ou n'existe plus) : opération refusée.", "Disk {n} is the Windows disk (or no longer exists): operation refused."));
             }
         }
     }
@@ -494,11 +493,11 @@ fn open_log(path: &str) -> Option<std::fs::File> {
 }
 
 fn load_plan(plan_path: &str, expected_hash: &str) -> Result<Plan, String> {
-    let bytes = std::fs::read(plan_path).map_err(|e| format!("Plan illisible : {e}"))?;
+    let bytes = std::fs::read(plan_path).map_err(|e| crate::trf!("Plan illisible : {e}", "Unreadable plan: {e}"))?;
     if !sha256_hex(&bytes).eq_ignore_ascii_case(expected_hash.trim()) {
-        return Err("Le plan a été modifié après votre autorisation : exécution refusée.".into());
+        return Err(crate::tr!("Le plan a été modifié après votre autorisation : exécution refusée.", "The plan was changed after your permission: execution refused.").into());
     }
-    serde_json::from_slice(&bytes).map_err(|e| format!("Plan illisible : {e}"))
+    serde_json::from_slice(&bytes).map_err(|e| crate::trf!("Plan illisible : {e}", "Unreadable plan: {e}"))
 }
 
 pub fn run(plan_path: &str, log_path: &str, plan_hash: &str) -> i32 {
@@ -515,7 +514,7 @@ pub fn run(plan_path: &str, log_path: &str, plan_hash: &str) -> i32 {
     };
     let live = match live_disks() {
         Ok(l) => l,
-        Err(e) => return fail(&mut log, &format!("Impossible de relire les disques : {e}")),
+        Err(e) => return fail(&mut log, &crate::trf!("Impossible de relire les disques : {e}", "Could not read the disks again: {e}")),
     };
     if let Err(e) = check_disks(&plan.disks, &live).and_then(|_| check_destructive(&plan.steps, &live)) {
         return fail(&mut log, &e);
@@ -524,7 +523,7 @@ pub fn run(plan_path: &str, log_path: &str, plan_hash: &str) -> i32 {
     for (i, step) in plan.steps.iter().enumerate() {
         log.line(&format!("ETAPE {}/{} {}", i + 1, n, step.title()));
         log.pct(0.0);
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_step(step, &mut log))).unwrap_or_else(|_| Err("Erreur interne inattendue.".into()));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_step(step, &mut log))).unwrap_or_else(|_| Err(crate::tr!("Erreur interne inattendue.", "Unexpected internal error.").into()));
         if let Err(e) = r {
             return fail(&mut log, &e);
         }

@@ -58,7 +58,7 @@ fn read_mbr_parts(dev: &mut Dev, ss: u64) -> Result<(Vec<u8>, Vec<MbrPart>), Str
     let mut s0 = vec![0u8; ss as usize];
     dev.read_at(0, &mut s0)?;
     if s0[510] != 0x55 || s0[511] != 0xAA {
-        return Err("La table de partitions MBR est illisible.".into());
+        return Err(crate::tr!("La table de partitions MBR est illisible.", "The MBR partition table cannot be read.").into());
     }
     let mut parts = Vec::new();
     for i in 0..4 {
@@ -165,13 +165,13 @@ pub fn mbr_to_gpt(disk: u32, ss: u64) -> Result<(), String> {
     let (s0, parts) = read_mbr_parts(&mut dev, ss)?;
     let es = entries_sectors(ss);
     if parts.iter().any(|p| p.start < 2 + es) {
-        return Err("La première partition commence trop tôt pour GPT.".into());
+        return Err(crate::tr!("La première partition commence trop tôt pour GPT.", "The first partition starts too early for GPT.").into());
     }
     if parts.iter().any(|p| p.start + p.count > total - 2 - es) {
-        return Err("Il faut un peu d'espace libre à la fin du disque pour la copie de secours GPT.".into());
+        return Err(crate::tr!("Il faut un peu d'espace libre à la fin du disque pour la copie de secours GPT.", "A little free space is needed at the end of the disk for the GPT backup copy.").into());
     }
     if parts.iter().any(|p| p.ptype == 0x42) {
-        return Err("Disque dynamique : convertissez-le d'abord en disque de base.".into());
+        return Err(crate::tr!("Disque dynamique : convertissez-le d'abord en disque de base.", "Dynamic disk: convert it to a basic disk first.").into());
     }
     let mut rng = XorShift(seed());
     let mut entries = vec![0u8; (ENTRY_COUNT * ENTRY_SIZE) as usize];
@@ -208,13 +208,13 @@ fn read_gpt(dev: &mut Dev, ss: u64) -> Result<(Vec<u8>, Vec<u8>), String> {
     let mut h = vec![0u8; ss as usize];
     dev.read_at(ss, &mut h)?;
     if &h[0..8] != b"EFI PART" {
-        return Err("Aucune table GPT valide n'a été trouvée.".into());
+        return Err(crate::tr!("Aucune table GPT valide n'a été trouvée.", "No valid GPT table was found.").into());
     }
     let elba = u64le(&h, 72);
     let n = u32le(&h, 80) as u64;
     let sz = u32le(&h, 84) as u64;
     if n == 0 || n > 1024 || sz < 128 || sz > 1024 {
-        return Err("En-tête GPT inattendu.".into());
+        return Err(crate::tr!("En-tête GPT inattendu.", "Unexpected GPT header.").into());
     }
     let mut e = vec![0u8; (n * sz).div_ceil(ss) as usize * ss as usize];
     dev.read_at(elba * ss, &mut e)?;
@@ -236,16 +236,16 @@ pub fn gpt_to_mbr(disk: u32, ss: u64, fat32_offsets: &[u64]) -> Result<(), Strin
             continue;
         }
         if t == guid_bytes(GUID_LDM_META) || t == guid_bytes(GUID_LDM_DATA) {
-            return Err("Disque dynamique : convertissez-le d'abord en disque de base.".into());
+            return Err(crate::tr!("Disque dynamique : convertissez-le d'abord en disque de base.", "Dynamic disk: convert it to a basic disk first.").into());
         }
         parts.push(GptPart { tguid: t, first: u64le(chunk, 32), last: u64le(chunk, 40) });
     }
     parts.sort_by_key(|p| p.first);
     if parts.len() > 4 {
-        return Err("Un disque MBR accepte au plus 4 partitions principales.".into());
+        return Err(crate::tr!("Un disque MBR accepte au plus 4 partitions principales.", "An MBR disk accepts at most 4 primary partitions.").into());
     }
     if parts.iter().any(|p| p.last >= 0xFFFF_FFFF) {
-        return Err("Une partition dépasse la limite de 2 To d'un disque MBR.".into());
+        return Err(crate::tr!("Une partition dépasse la limite de 2 To d'un disque MBR.", "A partition goes beyond the 2 TB limit of an MBR disk.").into());
     }
     let mut m = vec![0u8; ss as usize];
     let mut rng = XorShift(seed());
@@ -299,7 +299,7 @@ pub fn fix_ids(disk: u32, ss: u64) -> Result<(), String> {
         let n = u32le(&h, 80) as u64;
         let sz = u32le(&h, 84) as u64;
         if n != ENTRY_COUNT || sz != ENTRY_SIZE {
-            return Err("Format GPT non standard : identifiants laissés tels quels.".into());
+            return Err(crate::tr!("Format GPT non standard : identifiants laissés tels quels.", "Non-standard GPT format: identifiers left as they are.").into());
         }
         for chunk in e.chunks_mut(sz as usize) {
             if chunk[0..16] != [0u8; 16] {
@@ -327,7 +327,7 @@ pub fn move_entry(disk: u32, ss: u64, old_lba: u64, new_lba: u64) -> Result<(), 
         let n = u32le(&h, 80) as u64;
         let sz = u32le(&h, 84) as u64;
         if n != ENTRY_COUNT || sz != ENTRY_SIZE {
-            return Err("Format GPT non standard : déplacement refusé.".into());
+            return Err(crate::tr!("Format GPT non standard : déplacement refusé.", "Non-standard GPT format: move refused.").into());
         }
         let mut found = false;
         for chunk in e.chunks_mut(sz as usize) {
@@ -339,7 +339,7 @@ pub fn move_entry(disk: u32, ss: u64, old_lba: u64, new_lba: u64) -> Result<(), 
             }
         }
         if !found {
-            return Err("Entrée de la partition introuvable dans la table GPT.".into());
+            return Err(crate::tr!("Entrée de la partition introuvable dans la table GPT.", "The partition's entry was not found in the GPT table.").into());
         }
         let guid: [u8; 16] = h[56..72].try_into().unwrap();
         write_gpt(&mut dev, ss, total, guid, &e)?;
@@ -351,7 +351,7 @@ pub fn move_entry(disk: u32, ss: u64, old_lba: u64, new_lba: u64) -> Result<(), 
             let o = 446 + i * 16;
             if s0[o + 4] != 0 && u32le(&s0, o + 8) as u64 == old_lba {
                 if new_lba > 0xFFFF_FFFF {
-                    return Err("Position hors de portée d'un disque MBR.".into());
+                    return Err(crate::tr!("Position hors de portée d'un disque MBR.", "Position out of reach of an MBR disk.").into());
                 }
                 s0[o + 1..o + 4].copy_from_slice(&[0xFE, 0xFF, 0xFF]);
                 s0[o + 8..o + 12].copy_from_slice(&(new_lba as u32).to_le_bytes());
@@ -359,7 +359,7 @@ pub fn move_entry(disk: u32, ss: u64, old_lba: u64, new_lba: u64) -> Result<(), 
             }
         }
         if !found {
-            return Err("Entrée de la partition introuvable dans la table MBR (les partitions logiques ne peuvent pas être déplacées).".into());
+            return Err(crate::tr!("Entrée de la partition introuvable dans la table MBR (les partitions logiques ne peuvent pas être déplacées).", "The partition's entry was not found in the MBR table (logical partitions cannot be moved).").into());
         }
         dev.write_at(0, &s0)?;
     }

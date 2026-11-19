@@ -37,7 +37,7 @@ impl Style {
         match self {
             Style::Mbr => "MBR",
             Style::Gpt => "GPT",
-            Style::Raw => "Non initialisé",
+            Style::Raw => crate::tr!("Non initialisé", "Not initialized"),
         }
     }
 }
@@ -72,7 +72,7 @@ impl Fs {
             Fs::ExFat => "exFAT".into(),
             Fs::Fat => "FAT".into(),
             Fs::Refs => "ReFS".into(),
-            Fs::Raw => "Non formatée".into(),
+            Fs::Raw => crate::tr!("Non formatée", "Unformatted").into(),
             Fs::Other(s) => s.clone(),
         }
     }
@@ -103,14 +103,14 @@ pub enum Kind {
 impl Kind {
     pub fn name(&self) -> &'static str {
         match self {
-            Kind::Data => "Principale",
-            Kind::Efi => "Système EFI",
-            Kind::Msr => "Réservée Microsoft",
-            Kind::Recovery => "Récupération",
-            Kind::LdmMeta => "Métadonnées dynamiques",
-            Kind::LdmData => "Volume dynamique",
-            Kind::Extended => "Étendue",
-            Kind::Logical => "Logique",
+            Kind::Data => crate::tr!("Principale", "Primary"),
+            Kind::Efi => crate::tr!("Système EFI", "EFI system"),
+            Kind::Msr => crate::tr!("Réservée Microsoft", "Microsoft reserved"),
+            Kind::Recovery => crate::tr!("Récupération", "Recovery"),
+            Kind::LdmMeta => crate::tr!("Métadonnées dynamiques", "Dynamic metadata"),
+            Kind::LdmData => crate::tr!("Volume dynamique", "Dynamic volume"),
+            Kind::Extended => crate::tr!("Étendue", "Extended"),
+            Kind::Logical => crate::tr!("Logique", "Logical"),
         }
     }
 }
@@ -270,7 +270,7 @@ impl Disk {
         self.parts.iter().map(|p| p.end()).max().unwrap_or(0)
     }
     pub fn type_name(&self) -> String {
-        format!("{} · {}", self.style.name(), if self.dynamic { "Dynamique" } else { "De base" })
+        format!("{} · {}", self.style.name(), if self.dynamic { crate::tr!("Dynamique", "Dynamic") } else { crate::tr!("De base", "Basic") })
     }
     pub fn primary_count(&self) -> usize {
         self.parts.iter().filter(|p| p.kind != Kind::Logical).count()
@@ -291,15 +291,17 @@ pub fn fmt_size(bytes: u64) -> String {
     let gb = mb / 1024.0;
     let tb = gb / 1024.0;
     let (v, unit) = if tb >= 1.0 {
-        (tb, "To")
+        (tb, crate::tr!("To", "TB"))
     } else if gb >= 1.0 {
-        (gb, "Go")
+        (gb, crate::tr!("Go", "GB"))
     } else if mb >= 1.0 {
-        (mb, "Mo")
+        (mb, crate::tr!("Mo", "MB"))
     } else {
-        (bytes as f64 / KIB as f64, "Ko")
+        (bytes as f64 / KIB as f64, crate::tr!("Ko", "KB"))
     };
     let s = format!("{v:.1}");
-    let s = s.strip_suffix(".0").unwrap_or(&s).replace('.', ",");
+    let s = s.strip_suffix(".0").unwrap_or(&s).to_string();
+    // French writes 212,6 Go; English 212.6 GB.
+    let s = if crate::i18n::en() { s } else { s.replace('.', ",") };
     format!("{s} {unit}")
 }

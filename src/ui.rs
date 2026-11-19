@@ -55,6 +55,7 @@ pub enum Page {
     Convert,
     WinPe,
     Support,
+    Settings,
     About,
 }
 
@@ -157,7 +158,7 @@ impl App {
         style.visuals.override_text_color = Some(TEXT);
         style.visuals.selection.bg_fill = ACCENT.gamma_multiply(0.6);
         style.visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT_DARK);
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, ACCENT);
+        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
         style.visuals.window_rounding = Rounding::same(10.0);
         style.spacing.item_spacing = Vec2::new(8.0, 7.0);
         style.spacing.button_padding = Vec2::new(10.0, 5.0);
@@ -210,6 +211,7 @@ impl App {
             "convert" => Page::Convert,
             "winpe" => Page::WinPe,
             "support" => Page::Support,
+            "settings" => Page::Settings,
             "about" => Page::About,
             _ => Page::Home,
         };
@@ -241,7 +243,12 @@ impl App {
                 self.sel = Sel::Part(d.number, p.offset);
                 self.dialog = Some(Dlg::Resize { disk: d.number, offset: p.offset, pos: p.offset, size_mb: (p.size / MIB) as f64, regions, min: ops::min_size(&p), cur: p.size, can_resize: true, can_move: true, grab: None });
             }
-            self.load_note = Some("Mode démonstration : ce sont des disques d'exemple, rien n'est modifié sur votre PC.".into());
+            // DISKCRAFT_CLEAN_SHOT: pictures for the README, without the demo banner.
+            self.load_note = if std::env::var("DISKCRAFT_CLEAN_SHOT").is_ok() {
+                None
+            } else {
+                Some(crate::tr!("Mode démonstration : ce sont des disques d'exemple, rien n'est modifié sur votre PC.", "Demo mode: these are example disks, nothing is changed on your PC.").into())
+            };
             return;
         }
         let (tx, rx) = channel();
@@ -274,7 +281,7 @@ impl App {
                 self.ops.push(op);
                 self.preview = p;
             }
-            Err(e) => self.dialog = Some(Dlg::Message { title: "Opération impossible".into(), text: e }),
+            Err(e) => self.dialog = Some(Dlg::Message { title: crate::tr!("Opération impossible", "Operation not possible").into(), text: e }),
         }
     }
 
@@ -291,8 +298,8 @@ impl App {
     fn start_worker(&mut self, steps: Vec<Step>, title: String, queue: bool) {
         if self.demo {
             self.dialog = Some(Dlg::Message {
-                title: "Mode démonstration".into(),
-                text: "Les disques affichés sont des exemples : rien n'a été exécuté. Relancez DiskCraft sans --demo pour travailler sur vos vrais disques.".into(),
+                title: crate::tr!("Mode démonstration", "Demo mode").into(),
+                text: crate::tr!("Les disques affichés sont des exemples : rien n'a été exécuté. Relancez DiskCraft sans --demo pour travailler sur vos vrais disques.", "The disks shown are examples: nothing was run. Start DiskCraft without --demo to work on your real disks.").into(),
             });
             return;
         }
@@ -304,7 +311,7 @@ impl App {
         let disks = self.base.iter().map(|d| crate::plan::DiskId { number: d.number, size: d.size, uid: d.uid.clone(), model: d.model.clone() }).collect();
         let json = serde_json::to_string_pretty(&Plan { steps, disks }).unwrap_or_default();
         if let Err(e) = std::fs::write(&plan_path, &json) {
-            self.dialog = Some(Dlg::Message { title: "Erreur".into(), text: e.to_string() });
+            self.dialog = Some(Dlg::Message { title: crate::tr!("Erreur", "Error").into(), text: e.to_string() });
             return;
         }
         let _ = std::fs::write(&log_path, "");
@@ -324,11 +331,11 @@ impl App {
             }
             let ok = c.status().map(|s| s.success()).unwrap_or(false);
             if !ok {
-                let _ = std::fs::write(&lp, "ERREUR L'autorisation administrateur a été refusée : rien n'a été modifié.\nFIN ECHEC\n");
+                let _ = std::fs::write(&lp, crate::tr!("ERREUR L'autorisation administrateur a été refusée : rien n'a été modifié.\nFIN ECHEC\n", "ERREUR Administrator permission was refused: nothing was changed.\nFIN ECHEC\n"));
             }
         });
         self.dialog = None;
-        self.run = Some(Run { log: log_path, title, lines: Vec::new(), step: "Démarrage (autorisez DiskCraft à modifier l'appareil)...".into(), pct: 0.0, done: None, queue, last_read: 0.0 });
+        self.run = Some(Run { log: log_path, title, lines: Vec::new(), step: crate::tr!("Démarrage (autorisez DiskCraft à modifier l'appareil)...", "Starting (allow DiskCraft to make changes to your device)...").into(), pct: 0.0, done: None, queue, last_read: 0.0 });
     }
 
     fn poll_run(&mut self, now: f64) {
@@ -346,9 +353,9 @@ impl App {
             } else if let Some(p) = l.strip_prefix("PCT ") {
                 r.pct = p.trim().parse().unwrap_or(r.pct);
             } else if let Some(s) = l.strip_prefix("INFO ") {
-                r.lines.push(s.to_string());
+                r.lines.push(crate::i18n::log_line(s));
             } else if let Some(s) = l.strip_prefix("ERREUR ") {
-                r.lines.push(format!("⚠ {s}"));
+                r.lines.push(format!("⚠ {}", crate::i18n::log_line(s)));
             } else if l.starts_with("FIN OK") {
                 r.done = Some(true);
             } else if l.starts_with("FIN ECHEC") {
@@ -378,7 +385,7 @@ fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Frame::none()
         .fill(CARD)
         .rounding(10.0)
-        .stroke(Stroke::new(1.0, LINE))
+        .stroke(Stroke::new(1.0_f32, LINE))
         .inner_margin(14.0)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -413,11 +420,11 @@ fn badge(ui: &mut egui::Ui, text: &str, color: Color32) {
 fn disk_combo(ui: &mut egui::Ui, id: &str, disks: &[Disk], value: &mut Option<u32>, filter: impl Fn(&Disk) -> bool) {
     let text = value
         .and_then(|n| disks.iter().find(|d| d.number == n))
-        .map(|d| format!("Disque {} · {} · {}", d.number, d.model, fmt_size(d.size)))
-        .unwrap_or_else(|| "Choisir un disque...".into());
+        .map(|d| crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", d.number, d.model, fmt_size(d.size)))
+        .unwrap_or_else(|| crate::tr!("Choisir un disque...", "Choose a disk...").into());
     egui::ComboBox::from_id_salt(id).width(420.0).selected_text(text).show_ui(ui, |ui| {
         for d in disks.iter().filter(|d| filter(d)) {
-            ui.selectable_value(value, Some(d.number), format!("Disque {} · {} · {} · {}", d.number, d.model, fmt_size(d.size), d.type_name()));
+            ui.selectable_value(value, Some(d.number), crate::trf!("Disque {} · {} · {} · {}", "Disk {} · {} · {} · {}", d.number, d.model, fmt_size(d.size), d.type_name()));
         }
     });
 }
@@ -451,7 +458,7 @@ impl eframe::App for App {
                     Err(e) => {
                         self.set_disks(crate::probe::demo_disks());
                         self.demo = true;
-                        self.load_note = Some(format!("Les disques de ce PC n'ont pas pu être lus ({}) : disques d'exemple affichés.", e.trim()));
+                        self.load_note = Some(crate::trf!("Les disques de ce PC n'ont pas pu être lus ({}) : disques d'exemple affichés.", "This PC's disks could not be read ({}): example disks are shown.", e.trim()));
                     }
                 }
             }
@@ -476,6 +483,7 @@ impl eframe::App for App {
                 Page::Convert => self.page_convert(ui, &mut acts),
                 Page::WinPe => self.page_winpe(ui, &mut acts),
                 Page::Support => self.page_support(ui),
+                Page::Settings => self.page_settings(ui),
                 Page::About => self.page_about(ui),
             });
         });
@@ -498,9 +506,9 @@ impl eframe::App for App {
                 Act::Execute => match self.plan() {
                     Ok(steps) => {
                         let n = self.ops.len();
-                        self.start_worker(steps, format!("Exécution de {n} opération(s)"), true)
+                        self.start_worker(steps, crate::trf!("Exécution de {n} opération(s)", "Running {n} operation(s)"), true)
                     }
-                    Err(e) => self.dialog = Some(Dlg::Message { title: "Erreur".into(), text: e }),
+                    Err(e) => self.dialog = Some(Dlg::Message { title: crate::tr!("Erreur", "Error").into(), text: e }),
                 },
                 Act::RunNow(steps, title) => self.start_worker(steps, title, false),
                 Act::Reload => {
@@ -554,21 +562,22 @@ impl App {
                 ui.vertical(|ui| {
                     ui.add_space(1.0);
                     ui.label(RichText::new("DiskCraft").size(19.0).strong().color(TEXT));
-                    ui.label(RichText::new(format!("v{} · libre et gratuit", env!("CARGO_PKG_VERSION"))).size(11.0).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("v{} · libre et gratuit", "v{} · free and open source", env!("CARGO_PKG_VERSION"))).size(11.0).color(MUTED));
                 });
             });
             ui.add_space(14.0);
             ui.separator();
             ui.add_space(6.0);
             let items = [
-                (Page::Home, "🏠", "Accueil", ICON_BLUE),
-                (Page::Partitions, "🖴", "Gestionnaire de partitions", ICON_TEAL),
-                (Page::Clone, "🗐", "Cloner", ICON_PURPLE),
-                (Page::Migrate, "➡", "Migrer Windows", ICON_GREEN),
-                (Page::Convert, "⟲", "Convertisseurs", ICON_ORANGE),
-                (Page::WinPe, "💿", "Disque de démarrage", ICON_TEAL),
-                (Page::Support, "❓", "Aide & support", ICON_RED),
-                (Page::About, "ℹ", "À propos", MUTED),
+                (Page::Home, "🏠", crate::tr!("Accueil", "Home"), ICON_BLUE),
+                (Page::Partitions, "🖴", crate::tr!("Gestionnaire de partitions", "Partition manager"), ICON_TEAL),
+                (Page::Clone, "🗐", crate::tr!("Cloner", "Clone"), ICON_PURPLE),
+                (Page::Migrate, "➡", crate::tr!("Migrer Windows", "Migrate Windows"), ICON_GREEN),
+                (Page::Convert, "⟲", crate::tr!("Convertisseurs", "Converters"), ICON_ORANGE),
+                (Page::WinPe, "💿", crate::tr!("Disque de démarrage", "Boot disk"), ICON_TEAL),
+                (Page::Support, "❓", crate::tr!("Aide & support", "Help & support"), ICON_RED),
+                (Page::Settings, "⚙", crate::tr!("Paramètres", "Settings"), MUTED),
+                (Page::About, "ℹ", crate::tr!("À propos", "About"), MUTED),
             ];
             for (page, icon, name, color) in items {
                 let sel = self.page == page;
@@ -587,38 +596,39 @@ impl App {
                 }
             }
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                ui.label(RichText::new("Logiciel libre (GPL-3.0) · support gratuit").size(11.0).color(MUTED));
+                ui.label(RichText::new(tr!("Logiciel libre (GPL-3.0) · support gratuit", "Free software (GPL-3.0) · free support")).size(11.0).color(MUTED));
             });
         });
     }
 
     fn top(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        egui::TopBottomPanel::top("top").exact_height(54.0).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0, LINE)).inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
+        egui::TopBottomPanel::top("top").exact_height(54.0).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0_f32, LINE)).inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
                 let title = match self.page {
-                    Page::Home => "Accueil",
-                    Page::Partitions => "Gestionnaire de partitions",
-                    Page::Clone => "Cloner un disque ou une partition",
-                    Page::Migrate => "Migrer Windows vers un SSD ou un disque dur",
-                    Page::Convert => "Convertisseurs",
-                    Page::WinPe => "Disque de démarrage WinPE",
-                    Page::Support => "Aide & support gratuit",
-                    Page::About => "À propos de DiskCraft",
+                    Page::Home => crate::tr!("Accueil", "Home"),
+                    Page::Partitions => crate::tr!("Gestionnaire de partitions", "Partition manager"),
+                    Page::Clone => crate::tr!("Cloner un disque ou une partition", "Clone a disk or a partition"),
+                    Page::Migrate => crate::tr!("Migrer Windows vers un SSD ou un disque dur", "Migrate Windows to an SSD or a hard drive"),
+                    Page::Convert => crate::tr!("Convertisseurs", "Converters"),
+                    Page::WinPe => crate::tr!("Disque de démarrage WinPE", "WinPE boot disk"),
+                    Page::Support => crate::tr!("Aide & support gratuit", "Free help & support"),
+                    Page::Settings => crate::tr!("Paramètres", "Settings"),
+                    Page::About => crate::tr!("À propos de DiskCraft", "About DiskCraft"),
                 };
                 ui.label(RichText::new(title).size(17.0).strong());
                 if self.loading.is_some() {
                     ui.add(egui::Spinner::new());
-                    ui.label(RichText::new("Lecture des disques...").color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Lecture des disques...", "Reading disks...")).color(MUTED));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let n = self.ops.len();
-                    if primary(ui, &format!("▶  Exécuter {n} opération(s)"), n > 0) {
+                    if primary(ui, &crate::trf!("▶  Exécuter {n} opération(s)", "▶  Execute {n} operation(s)"), n > 0) {
                         acts.push(Act::Open(Dlg::Confirm { backup_ok: false }));
                     }
-                    if ui.add_enabled(n > 0, egui::Button::new("↩ Annuler").rounding(6.0)).clicked() {
+                    if ui.add_enabled(n > 0, egui::Button::new(crate::tr!("↩ Annuler", "↩ Undo")).rounding(6.0)).clicked() {
                         acts.push(Act::Undo);
                     }
-                    if ui.add_enabled(self.loading.is_none(), egui::Button::new("⟳ Actualiser").rounding(6.0)).clicked() {
+                    if ui.add_enabled(self.loading.is_none(), egui::Button::new(crate::tr!("⟳ Actualiser", "⟳ Refresh")).rounding(6.0)).clicked() {
                         acts.push(Act::Reload);
                     }
                 });
@@ -629,13 +639,13 @@ impl App {
     fn queue_panel(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
         egui::TopBottomPanel::bottom("queue")
             .resizable(false)
-            .frame(egui::Frame::none().fill(Color32::from_rgb(0x33, 0x2b, 0x20)).stroke(Stroke::new(1.0, PENDING.gamma_multiply(0.5))).inner_margin(egui::Margin::symmetric(18.0, 10.0)))
+            .frame(egui::Frame::none().fill(Color32::from_rgb(0x33, 0x2b, 0x20)).stroke(Stroke::new(1.0_f32, PENDING.gamma_multiply(0.5))).inner_margin(egui::Margin::symmetric(18.0, 10.0)))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Opérations en attente ({})", self.ops.len())).strong().color(PENDING));
-                    ui.label(RichText::new("Rien n'est modifié tant que vous n'avez pas cliqué sur « Exécuter ». Vous pouvez annuler à tout moment.").color(MUTED).size(12.0));
+                    ui.label(RichText::new(crate::trf!("Opérations en attente ({})", "Pending operations ({})", self.ops.len())).strong().color(PENDING));
+                    ui.label(RichText::new(crate::tr!("Rien n'est modifié tant que vous n'avez pas cliqué sur « Exécuter ». Vous pouvez annuler à tout moment.", "Nothing is changed until you click \"Execute\". You can undo at any time.")).color(MUTED).size(12.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Tout annuler").clicked() {
+                        if ui.small_button(crate::tr!("Tout annuler", "Undo all")).clicked() {
                             acts.push(Act::UndoAll);
                         }
                     });
@@ -667,16 +677,16 @@ impl App {
                         ui.painter().text(r.center(), Align2::CENTER_CENTER, "🖴", FontId::proportional(18.0), if header_sel { Color32::WHITE } else { MUTED });
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(format!("Disque {}", d.number)).size(15.5).strong());
+                                ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).size(15.5).strong());
                                 ui.label(RichText::new(&d.model).color(MUTED));
                                 if d.is_system || d.is_boot {
                                     badge(ui, "Windows", ACCENT);
                                 }
                                 if d.pending {
-                                    badge(ui, "Modifié", PENDING);
+                                    badge(ui, crate::tr!("Modifié", "Modified"), PENDING);
                                 }
                                 if d.offline {
-                                    badge(ui, "Hors ligne", DANGER);
+                                    badge(ui, crate::tr!("Hors ligne", "Offline"), DANGER);
                                 }
                             });
                             let bus = if d.bus.is_empty() { "—".to_string() } else { d.bus.clone() };
@@ -696,7 +706,7 @@ impl App {
             ui.add_space(12.0);
         }
         if disks.is_empty() && self.loading.is_none() {
-            ui.label("Aucun disque.");
+            ui.label(crate::tr!("Aucun disque.", "No disks."));
         }
     }
 
@@ -707,7 +717,7 @@ impl App {
         let (rect, _) = ui.allocate_exact_size(Vec2::new(width, h), Sense::hover());
         if segs.is_empty() {
             ui.painter().rect_filled(rect, 6.0, CARD_HI);
-            let msg = if d.size == 0 { "Aucun support inséré" } else { "Disque non initialisé : sélectionnez le disque puis « Initialiser en GPT » ou « en MBR »" };
+            let msg = if d.size == 0 { crate::tr!("Aucun support inséré", "No media inserted") } else { crate::tr!("Disque non initialisé : sélectionnez le disque puis « Initialiser en GPT » ou « en MBR »", "Uninitialized disk: select the disk, then \"Initialize as GPT\" or \"as MBR\"") };
             ui.painter().text(rect.center(), Align2::CENTER_CENTER, msg, FontId::proportional(13.0), MUTED);
             return;
         }
@@ -741,7 +751,7 @@ impl App {
                 }
                 Segment::Free { offset, size } => (
                     matches!(self.sel, Sel::Free(n, o, _) if n == d.number && o == *offset),
-                    "Non alloué".to_string(),
+                    crate::tr!("Non alloué", "Unallocated").to_string(),
                     fmt_size(*size),
                     Color32::from_rgb(0x7d, 0x83, 0x8e),
                     0.0,
@@ -763,13 +773,13 @@ impl App {
             p.text(r.left_top() + Vec2::new(7.0, 13.0), Align2::LEFT_TOP, &label, FontId::proportional(13.0), TEXT);
             p.text(r.left_top() + Vec2::new(7.0, 32.0), Align2::LEFT_TOP, &sub, FontId::proportional(11.5), MUTED);
             let stroke = if sel {
-                Stroke::new(2.5, ACCENT_DARK)
+                Stroke::new(2.5_f32, ACCENT_DARK)
             } else if pending {
-                Stroke::new(2.0, PENDING)
+                Stroke::new(2.0_f32, PENDING)
             } else if resp.hovered() {
-                Stroke::new(1.5, color)
+                Stroke::new(1.5_f32, color)
             } else {
-                Stroke::new(1.0, color.gamma_multiply(0.4))
+                Stroke::new(1.0_f32, color.gamma_multiply(0.4))
             };
             ui.painter().rect_stroke(r, 6.0, stroke);
             if resp.clicked() {
@@ -781,9 +791,9 @@ impl App {
             resp.on_hover_text(match s {
                 Segment::Part(i) => {
                     let pt = &d.parts[*i];
-                    format!("{}\n{} · {}\nUtilisé : {}", pt.title(), pt.kind.name(), fmt_size(pt.size), pt.used.map(fmt_size).unwrap_or_else(|| "—".into()))
+                    crate::trf!("{}\n{} · {}\nUtilisé : {}", "{}\n{} · {}\nUsed: {}", pt.title(), pt.kind.name(), fmt_size(pt.size), pt.used.map(fmt_size).unwrap_or_else(|| "—".into()))
                 }
-                Segment::Free { size, .. } => format!("Espace non alloué : {}", fmt_size(*size)),
+                Segment::Free { size, .. } => crate::trf!("Espace non alloué : {}", "Unallocated space: {}", fmt_size(*size)),
             });
         }
     }
@@ -793,7 +803,7 @@ impl App {
             return;
         }
         egui::Grid::new(("grid", d.number)).num_columns(7).spacing([18.0, 4.0]).striped(true).min_col_width(60.0).show(ui, |ui| {
-            for h in ["Partition", "Système de fichiers", "Taille", "Utilisé", "Libre", "Type", "État"] {
+            for h in ["Partition", crate::tr!("Système de fichiers", "File system"), crate::tr!("Taille", "Size"), crate::tr!("Utilisé", "Used"), crate::tr!("Libre", "Free"), crate::tr!("Type", "Type"), crate::tr!("État", "Status")] {
                 ui.label(RichText::new(h).size(12.0).color(MUTED).strong());
             }
             ui.end_row();
@@ -812,25 +822,25 @@ impl App {
                         ui.label(p.kind.name());
                         let mut st = Vec::new();
                         if p.is_boot {
-                            st.push("Démarrage");
+                            st.push(crate::tr!("Démarrage", "Boot"));
                         }
                         if p.is_system {
-                            st.push("Système");
+                            st.push(crate::tr!("Système", "System"));
                         }
                         if p.is_active {
-                            st.push("Active");
+                            st.push(crate::tr!("Active", "Active"));
                         }
                         if p.letter.is_none() && p.kind == Kind::Data {
-                            st.push("Masquée");
+                            st.push(crate::tr!("Masquée", "Hidden"));
                         }
                         if p.pending {
-                            ui.label(RichText::new("En attente").color(PENDING));
+                            ui.label(RichText::new(crate::tr!("En attente", "Pending")).color(PENDING));
                         } else {
-                            ui.label(if st.is_empty() { "Aucun".to_string() } else { st.join(", ") });
+                            ui.label(if st.is_empty() { crate::tr!("Aucun", "None").to_string() } else { st.join(", ") });
                         }
                     }
                     Segment::Free { offset, size } => {
-                        if ui.selectable_label(matches!(self.sel, Sel::Free(n, o, _) if n == d.number && o == offset), RichText::new("Non alloué").italics()).clicked() {
+                        if ui.selectable_label(matches!(self.sel, Sel::Free(n, o, _) if n == d.number && o == offset), RichText::new(crate::tr!("Non alloué", "Unallocated")).italics()).clicked() {
                             acts.push(Act::Select(Sel::Free(d.number, offset, size)));
                         }
                         ui.label("—");
@@ -846,24 +856,24 @@ impl App {
     }
 
     fn side(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        egui::SidePanel::right("side").exact_width(270.0).resizable(false).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0, LINE)).inner_margin(14.0)).show(ctx, |ui| {
+        egui::SidePanel::right("side").exact_width(270.0).resizable(false).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0_f32, LINE)).inner_margin(14.0)).show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| match self.sel {
                 Sel::None => {
-                    ui.label(RichText::new("Sélectionnez une partition").size(15.0).strong());
-                    ui.label(RichText::new("Cliquez sur une partition, un espace non alloué ou le titre d'un disque pour voir ce que vous pouvez faire.").color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Sélectionnez une partition", "Select a partition")).size(15.0).strong());
+                    ui.label(RichText::new(crate::tr!("Cliquez sur une partition, un espace non alloué ou le titre d'un disque pour voir ce que vous pouvez faire.", "Click a partition, some unallocated space or a disk's title to see what you can do.")).color(MUTED));
                     ui.add_space(10.0);
                     let d = self.preview.len();
                     let p = self.all_parts().len();
-                    ui.label(format!("{d} disque(s), {p} partition(s)"));
+                    ui.label(crate::trf!("{d} disque(s), {p} partition(s)", "{d} disk(s), {p} partition(s)"));
                     ui.add_space(10.0);
-                    ui.label(RichText::new("Légende").strong());
+                    ui.label(RichText::new(crate::tr!("Légende", "Legend")).strong());
                     for (name, c) in [
                         ("NTFS", Color32::from_rgb(0x2f, 0x7f, 0xd8)),
                         ("FAT32", Color32::from_rgb(0x3f, 0xa6, 0x5a)),
                         ("exFAT", Color32::from_rgb(0x1f, 0xa3, 0xa8)),
-                        ("Système EFI", Color32::from_rgb(0x8a, 0x63, 0xd2)),
-                        ("Récupération", Color32::from_rgb(0xd9, 0x8b, 0x2b)),
-                        ("Non alloué", Color32::from_rgb(0xb4, 0xbb, 0xc6)),
+                        (crate::tr!("Système EFI", "EFI system"), Color32::from_rgb(0x8a, 0x63, 0xd2)),
+                        (crate::tr!("Récupération", "Recovery"), Color32::from_rgb(0xd9, 0x8b, 0x2b)),
+                        (crate::tr!("Non alloué", "Unallocated"), Color32::from_rgb(0xb4, 0xbb, 0xc6)),
                     ] {
                         ui.horizontal(|ui| {
                             let (r, _) = ui.allocate_exact_size(Vec2::new(14.0, 14.0), Sense::hover());
@@ -877,16 +887,16 @@ impl App {
                     let Some(i) = d.part_at(o) else { return };
                     let p = d.parts[i].clone();
                     ui.label(RichText::new(p.title()).size(17.0).strong());
-                    ui.label(RichText::new(format!("Disque {} · {} · {}", n, p.fs.name(), fmt_size(p.size))).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", n, p.fs.name(), fmt_size(p.size))).color(MUTED));
                     if let Some(u) = p.used {
-                        ui.add(egui::ProgressBar::new(u as f32 / p.size.max(1) as f32).text(format!("{} utilisés sur {}", fmt_size(u), fmt_size(p.size))));
+                        ui.add(egui::ProgressBar::new(u as f32 / p.size.max(1) as f32).text(crate::trf!("{} utilisés sur {}", "{} used of {}", fmt_size(u), fmt_size(p.size))));
                     }
                     ui.add_space(8.0);
                     let prot = p.protected();
                     let ntfs = p.fs == Fs::Ntfs;
                     let can_resize = matches!(p.fs, Fs::Ntfs | Fs::Refs);
                     let can_move = !prot && !matches!(p.kind, Kind::Logical | Kind::Extended | Kind::LdmData | Kind::LdmMeta);
-                    if action(ui, "↔", "Redimensionner / déplacer", can_resize || can_move) {
+                    if action(ui, "↔", crate::tr!("Redimensionner / déplacer", "Resize / move"), can_resize || can_move) {
                         let lo = o - d.free_before(o);
                         let hi = p.end() + d.free_after(o);
                         // Its own place plus every other free area of the disk it could be dropped into.
@@ -913,85 +923,85 @@ impl App {
                             grab: None,
                         }));
                     }
-                    if action(ui, "🔗", "Fusionner avec la suivante", ntfs && d.next_part(o).is_some()) {
+                    if action(ui, "🔗", crate::tr!("Fusionner avec la suivante", "Merge with the next one"), ntfs && d.next_part(o).is_some()) {
                         acts.push(Act::Open(Dlg::Merge { disk: n, first: o }));
                     }
-                    if action(ui, "🖹", "Formater", !prot) {
+                    if action(ui, "🖹", crate::tr!("Formater", "Format"), !prot) {
                         acts.push(Act::Open(Dlg::Format { disk: n, offset: o, fs: if p.fs == Fs::Raw { Fs::Ntfs } else { p.fs.clone() }, label: p.label.clone(), cluster: 0, quick: true }));
                     }
-                    if action(ui, "🗑", "Supprimer", !prot) {
+                    if action(ui, "🗑", crate::tr!("Supprimer", "Delete"), !prot) {
                         acts.push(Act::Open(Dlg::Delete { disk: n, offset: o }));
                     }
-                    if action(ui, "✖", "Effacer les données", !prot) {
+                    if action(ui, "✖", crate::tr!("Effacer les données", "Wipe data"), !prot) {
                         acts.push(Act::Open(Dlg::Wipe { disk: n, offset: Some(o), passes: 1 }));
                     }
-                    if action(ui, "✔", "Vérifier / test de surface", true) {
+                    if action(ui, "✔", crate::tr!("Vérifier / test de surface", "Check / surface test"), true) {
                         acts.push(Act::Open(Dlg::Check { disk: n, offset: o, mode: 0 }));
                     }
-                    if action(ui, "🗐", "Cloner la partition", true) {
+                    if action(ui, "🗐", crate::tr!("Cloner la partition", "Clone partition"), true) {
                         self.clone_part_mode = true;
                         self.clone_psrc = Some((n, o));
                         acts.push(Act::Page(Page::Clone));
                     }
-                    if action(ui, "⟲", "Convertir NTFS en FAT32", ntfs && !prot) {
+                    if action(ui, "⟲", crate::tr!("Convertir NTFS en FAT32", "Convert NTFS to FAT32"), ntfs && !prot) {
                         self.fat_part = Some((n, o));
                         acts.push(Act::Page(Page::Convert));
                     }
                     ui.separator();
-                    if action(ui, "🔤", "Changer la lettre / masquer", !p.is_boot) {
+                    if action(ui, "🔤", crate::tr!("Changer la lettre / masquer", "Change letter / hide"), !p.is_boot) {
                         acts.push(Act::Open(Dlg::Letter { disk: n, offset: o, letter: p.letter }));
                     }
-                    if action(ui, "🏷", "Changer le nom", p.fs != Fs::Raw) {
+                    if action(ui, "🏷", crate::tr!("Changer le nom", "Change label"), p.fs != Fs::Raw) {
                         acts.push(Act::Open(Dlg::Label { disk: n, offset: o, label: p.label.clone() }));
                     }
-                    if action(ui, "★", "Rendre active", d.style == Style::Mbr && !p.is_active) {
+                    if action(ui, "★", crate::tr!("Rendre active", "Set active"), d.style == Style::Mbr && !p.is_active) {
                         acts.push(Act::Add(Op::SetActive { disk: n, offset: o }));
                     }
                     if prot {
                         ui.add_space(6.0);
-                        ui.label(RichText::new("Windows utilise cette partition : la supprimer, la formater ou l'effacer est bloqué.").size(12.0).color(MUTED));
+                        ui.label(RichText::new(crate::tr!("Windows utilise cette partition : la supprimer, la formater ou l'effacer est bloqué.", "Windows is using this partition: deleting, formatting or wiping it is blocked.")).size(12.0).color(MUTED));
                     }
                 }
                 Sel::Free(n, o, s) => {
-                    ui.label(RichText::new("Espace non alloué").size(17.0).strong());
-                    ui.label(RichText::new(format!("Disque {n} · {}", fmt_size(s))).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Espace non alloué", "Unallocated space")).size(17.0).strong());
+                    ui.label(RichText::new(crate::trf!("Disque {n} · {}", "Disk {n} · {}", fmt_size(s))).color(MUTED));
                     ui.add_space(8.0);
-                    if action(ui, "＋", "Créer une partition", true) {
+                    if action(ui, "＋", crate::tr!("Créer une partition", "Create a partition"), true) {
                         let letter = self.free_letters().first().copied();
                         acts.push(Act::Open(Dlg::Create { disk: n, offset: o, max: s, size_mb: (s / MIB) as f64, fs: Fs::Ntfs, label: String::new(), letter }));
                     }
-                    if action(ui, "🗐", "Cloner une partition ici", true) {
+                    if action(ui, "🗐", crate::tr!("Cloner une partition ici", "Clone a partition here"), true) {
                         self.clone_part_mode = true;
                         self.clone_pdst = Some((n, o));
                         acts.push(Act::Page(Page::Clone));
                     }
-                    ui.label(RichText::new("Pour agrandir la partition placée juste avant, sélectionnez-la puis « Redimensionner ».").size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Pour agrandir la partition placée juste avant, sélectionnez-la puis « Redimensionner ».", "To extend the partition just before it, select that partition, then \"Resize\".")).size(12.0).color(MUTED));
                 }
                 Sel::Disk(n) => {
                     let Some(d) = self.disk(n).cloned() else { return };
-                    ui.label(RichText::new(format!("Disque {n}")).size(17.0).strong());
+                    ui.label(RichText::new(crate::trf!("Disque {n}", "Disk {n}")).size(17.0).strong());
                     ui.label(RichText::new(format!("{} · {} · {}", d.model, fmt_size(d.size), d.type_name())).color(MUTED));
                     ui.add_space(8.0);
                     let sys = d.is_system || d.is_boot;
-                    if action(ui, "🗐", "Cloner le disque", true) {
+                    if action(ui, "🗐", crate::tr!("Cloner le disque", "Clone disk"), true) {
                         self.clone_part_mode = false;
                         self.clone_src = Some(n);
                         acts.push(Act::Page(Page::Clone));
                     }
-                    if action(ui, "➡", "Migrer Windows vers un autre disque", sys) {
+                    if action(ui, "➡", crate::tr!("Migrer Windows vers un autre disque", "Migrate Windows to another disk"), sys) {
                         acts.push(Act::Page(Page::Migrate));
                     }
-                    if action(ui, "⟲", if d.style == Style::Raw { "Initialiser en GPT" } else { "Convertir en GPT" }, d.style != Style::Gpt) {
+                    if action(ui, "⟲", if d.style == Style::Raw { crate::tr!("Initialiser en GPT", "Initialize as GPT") } else { crate::tr!("Convertir en GPT", "Convert to GPT") }, d.style != Style::Gpt) {
                         acts.push(Act::Add(Op::ToGpt { disk: n }));
                     }
-                    if action(ui, "⟲", if d.style == Style::Raw { "Initialiser en MBR" } else { "Convertir en MBR" }, d.style != Style::Mbr && !sys) {
+                    if action(ui, "⟲", if d.style == Style::Raw { crate::tr!("Initialiser en MBR", "Initialize as MBR") } else { crate::tr!("Convertir en MBR", "Convert to MBR") }, d.style != Style::Mbr && !sys) {
                         acts.push(Act::Add(Op::ToMbr { disk: n }));
                     }
-                    if action(ui, "⟲", "Convertir en disque de base", d.dynamic) {
+                    if action(ui, "⟲", crate::tr!("Convertir en disque de base", "Convert to basic disk"), d.dynamic) {
                         self.dyn_disk = Some(n);
                         acts.push(Act::Page(Page::Convert));
                     }
-                    if action(ui, "✖", "Effacer tout le disque", !sys) {
+                    if action(ui, "✖", crate::tr!("Effacer tout le disque", "Wipe the whole disk"), !sys) {
                         acts.push(Act::Open(Dlg::Wipe { disk: n, offset: None, passes: 1 }));
                     }
                 }
@@ -1007,8 +1017,8 @@ impl App {
             ui.add_space(6.0);
             ui.vertical(|ui| {
                 ui.add_space(6.0);
-                ui.label(RichText::new("Bienvenue dans DiskCraft").size(27.0).strong());
-                ui.label(RichText::new("Un gestionnaire de disques open source — local, gratuit et complet.").size(14.5).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Bienvenue dans DiskCraft", "Welcome to DiskCraft")).size(27.0).strong());
+                ui.label(RichText::new(crate::tr!("Un gestionnaire de disques open source — local, gratuit et complet.", "An open-source disk manager — local, free and complete.")).size(14.5).color(MUTED));
             });
         });
         ui.add_space(14.0);
@@ -1023,37 +1033,37 @@ impl App {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("👥").size(20.0).color(ICON_BLUE));
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Rejoindre la communauté DiskCraft").size(15.0).strong());
-                    ui.label(RichText::new("Obtenez de l'aide gratuitement, proposez des idées et suivez le développement.").color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Rejoindre la communauté DiskCraft", "Join the DiskCraft community")).size(15.0).strong());
+                    ui.label(RichText::new(crate::tr!("Obtenez de l'aide gratuitement, proposez des idées et suivez le développement.", "Get free help, suggest ideas and follow development.")).color(MUTED));
                 });
             });
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
-                if primary(ui, "💬  Poser une question", true) {
-                    open_url("https://github.com/diskcraft/diskcraft/discussions");
+                if primary(ui, crate::tr!("💬  Poser une question", "💬  Ask a question"), true) {
+                    open_url("https://github.com/Wikiabo-Labs/CraftDisk/discussions");
                 }
-                if ui.add(egui::Button::new("🐛  Signaler un problème").rounding(14.0)).clicked() {
-                    open_url("https://github.com/diskcraft/diskcraft/issues");
+                if ui.add(egui::Button::new(crate::tr!("🐛  Signaler un problème", "🐛  Report a problem")).rounding(14.0)).clicked() {
+                    open_url("https://github.com/Wikiabo-Labs/CraftDisk/issues");
                 }
-                if ui.add(egui::Button::new("</>  DiskCraft sur GitHub").rounding(14.0)).clicked() {
-                    open_url("https://github.com/diskcraft/diskcraft");
+                if ui.add(egui::Button::new(crate::tr!("</>  DiskCraft sur GitHub", "</>  DiskCraft on GitHub")).rounding(14.0)).clicked() {
+                    open_url("https://github.com/Wikiabo-Labs/CraftDisk");
                 }
-                if ui.add(egui::Button::new("📖  Guide d'utilisation").rounding(14.0)).clicked() {
+                if ui.add(egui::Button::new(crate::tr!("📖  Guide d'utilisation", "📖  User guide")).rounding(14.0)).clicked() {
                     acts.push(Act::Page(Page::Support));
                 }
             });
         });
         ui.add_space(14.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Outils recommandés").size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Outils recommandés", "Recommended tools")).size(15.0).strong());
             ui.add_space(6.0);
             let tools = [
-                ("↔", ICON_BLUE, "Redimensionner / déplacer", "Agrandir C: · Réduire · Déplacer une partition", Page::Partitions),
-                ("🗐", ICON_PURPLE, "Cloner", "Disque entier · Partition · Copie à chaud", Page::Clone),
-                ("➡", ICON_GREEN, "Migrer Windows", "Vers un SSD ou un nouveau disque · Démarrage réparé", Page::Migrate),
-                ("⟲", ICON_ORANGE, "Convertir", "MBR / GPT · NTFS en FAT32 · Dynamique en base", Page::Convert),
-                ("💿", ICON_TEAL, "Disque de démarrage", "Clé USB ou ISO WinPE avec DiskCraft", Page::WinPe),
-                ("✔", ICON_RED, "Vérifier un disque", "Erreurs du système de fichiers · Test de surface", Page::Partitions),
+                ("↔", ICON_BLUE, crate::tr!("Redimensionner / déplacer", "Resize / move"), crate::tr!("Agrandir C: · Réduire · Déplacer une partition", "Extend C: · Shrink · Move a partition"), Page::Partitions),
+                ("🗐", ICON_PURPLE, crate::tr!("Cloner", "Clone"), crate::tr!("Disque entier · Partition · Copie à chaud", "Whole disk · Partition · Live copy"), Page::Clone),
+                ("➡", ICON_GREEN, crate::tr!("Migrer Windows", "Migrate Windows"), crate::tr!("Vers un SSD ou un nouveau disque · Démarrage réparé", "To an SSD or a new disk · Boot repaired"), Page::Migrate),
+                ("⟲", ICON_ORANGE, crate::tr!("Convertir", "Convert"), crate::tr!("MBR / GPT · NTFS en FAT32 · Dynamique en base", "MBR / GPT · NTFS to FAT32 · Dynamic to basic"), Page::Convert),
+                ("💿", ICON_TEAL, crate::tr!("Disque de démarrage", "Boot disk"), crate::tr!("Clé USB ou ISO WinPE avec DiskCraft", "WinPE USB stick or ISO with DiskCraft"), Page::WinPe),
+                ("✔", ICON_RED, crate::tr!("Vérifier un disque", "Check a disk"), crate::tr!("Erreurs du système de fichiers · Test de surface", "File system errors · Surface test"), Page::Partitions),
             ];
             let w = ((ui.available_width() - 2.0 * 10.0) / 3.0).max(200.0);
             egui::Grid::new("tools").num_columns(3).spacing([10.0, 10.0]).show(ui, |ui| {
@@ -1071,7 +1081,7 @@ impl App {
                                     ui.label(RichText::new(*title).size(14.5).strong());
                                 });
                                 ui.add(egui::Label::new(RichText::new(*sub).size(12.0).color(MUTED)).truncate());
-                                ui.label(RichText::new("Utiliser").size(12.5).strong().color(ACCENT_DARK));
+                                ui.label(RichText::new(crate::tr!("Utiliser", "Open")).size(12.5).strong().color(ACCENT_DARK));
                             });
                         })
                         .response
@@ -1090,7 +1100,7 @@ impl App {
         });
         ui.add_space(14.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Vos disques").size(17.0).strong());
+            ui.label(RichText::new(crate::tr!("Vos disques", "Your disks")).size(17.0).strong());
             if self.loading.is_some() {
                 ui.add(egui::Spinner::new());
             }
@@ -1111,7 +1121,7 @@ impl App {
                         ui.label(RichText::new("🖴").size(20.0).color(if d.is_system || d.is_boot { ICON_GREEN } else { ICON_BLUE }));
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(format!("Disque {}", d.number)).strong());
+                                ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).strong());
                                 ui.label(RichText::new(&d.model).color(MUTED));
                                 if d.is_system || d.is_boot {
                                     badge(ui, "Windows", ICON_GREEN);
@@ -1120,9 +1130,9 @@ impl App {
                             ui.label(RichText::new(format!("{} · {} · {} partition(s)", fmt_size(d.size), d.type_name(), d.parts.len())).size(12.0).color(MUTED));
                             if d.size > 0 {
                                 let frac = used as f32 / d.size as f32;
-                                ui.add(egui::ProgressBar::new(frac).desired_width(380.0).text(format!("{} utilisés · {} non alloués", fmt_size(used), fmt_size(d.size.saturating_sub(allocated)))));
+                                ui.add(egui::ProgressBar::new(frac).desired_width(380.0).text(crate::trf!("{} utilisés · {} non alloués", "{} used · {} unallocated", fmt_size(used), fmt_size(d.size.saturating_sub(allocated)))));
                             } else {
-                                ui.label(RichText::new("Aucun support inséré").size(12.0).color(MUTED));
+                                ui.label(RichText::new(crate::tr!("Aucun support inséré", "No media inserted")).size(12.0).color(MUTED));
                             }
                         });
                     });
@@ -1138,31 +1148,31 @@ impl App {
     }
 
     fn page_clone(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
-        heading(ui, "Cloner", "Copie exacte secteur par secteur. Les volumes en cours d'utilisation sont copiés depuis un instantané, sans redémarrer.");
+        heading(ui, crate::tr!("Cloner", "Clone"), crate::tr!("Copie exacte secteur par secteur. Les volumes en cours d'utilisation sont copiés depuis un instantané, sans redémarrer.", "An exact sector-by-sector copy. Volumes in use are copied from a snapshot, without restarting."));
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.clone_part_mode, false, RichText::new("  Cloner un disque  ").size(14.0));
-            ui.selectable_value(&mut self.clone_part_mode, true, RichText::new("  Cloner une partition  ").size(14.0));
+            ui.selectable_value(&mut self.clone_part_mode, false, RichText::new(crate::tr!("  Cloner un disque  ", "  Clone a disk  ")).size(14.0));
+            ui.selectable_value(&mut self.clone_part_mode, true, RichText::new(crate::tr!("  Cloner une partition  ", "  Clone a partition  ")).size(14.0));
         });
         ui.add_space(8.0);
         let disks = self.preview.clone();
         if !self.clone_part_mode {
             card(ui, |ui| {
-                ui.label(RichText::new("1. Disque source").strong());
+                ui.label(RichText::new(crate::tr!("1. Disque source", "1. Source disk")).strong());
                 disk_combo(ui, "csrc", &disks, &mut self.clone_src, |_| true);
                 ui.add_space(6.0);
-                ui.label(RichText::new("2. Disque cible (il sera entièrement remplacé)").strong());
+                ui.label(RichText::new(crate::tr!("2. Disque cible (il sera entièrement remplacé)", "2. Target disk (it will be completely replaced)")).strong());
                 let src = self.clone_src;
                 disk_combo(ui, "cdst", &disks, &mut self.clone_dst, |d| Some(d.number) != src && !d.is_system && !d.is_boot);
-                ui.checkbox(&mut self.fit, "Agrandir la dernière partition pour remplir le disque cible");
+                ui.checkbox(&mut self.fit, crate::tr!("Agrandir la dernière partition pour remplir le disque cible", "Extend the last partition to fill the target disk"));
                 if let (Some(s), Some(t)) = (self.clone_src.and_then(|n| disks.iter().find(|d| d.number == n)), self.clone_dst.and_then(|n| disks.iter().find(|d| d.number == n))) {
                     ui.add_space(6.0);
-                    ui.label(format!("À copier : {}, place disponible : {}", fmt_size(s.used_extent()), fmt_size(t.size)));
+                    ui.label(crate::trf!("À copier : {}, place disponible : {}", "To copy: {}, space available: {}", fmt_size(s.used_extent()), fmt_size(t.size)));
                     if !t.parts.is_empty() {
-                        ui.label(RichText::new(format!("⚠ Les {} partition(s) du disque {} seront effacées.", t.parts.len(), t.number)).color(DANGER));
+                        ui.label(RichText::new(crate::trf!("⚠ Les {} partition(s) du disque {} seront effacées.", "⚠ The {} partition(s) on disk {} will be erased.", t.parts.len(), t.number)).color(DANGER));
                     }
                 }
                 ui.add_space(6.0);
-                if primary(ui, "Ajouter à la file d'attente", self.clone_src.is_some() && self.clone_dst.is_some()) {
+                if primary(ui, crate::tr!("Ajouter à la file d'attente", "Add to the queue"), self.clone_src.is_some() && self.clone_dst.is_some()) {
                     acts.push(Act::Add(Op::CloneDisk { src: self.clone_src.unwrap(), dst: self.clone_dst.unwrap(), fit: self.fit }));
                     acts.push(Act::Page(Page::Partitions));
                 }
@@ -1170,19 +1180,19 @@ impl App {
         } else {
             let parts: Vec<(u32, Partition)> = self.all_parts().into_iter().map(|(n, p)| (n, p.clone())).collect();
             card(ui, |ui| {
-                ui.label(RichText::new("1. Partition source").strong());
+                ui.label(RichText::new(crate::tr!("1. Partition source", "1. Source partition")).strong());
                 let txt = self
                     .clone_psrc
                     .and_then(|(n, o)| parts.iter().find(|(m, p)| *m == n && p.offset == o))
-                    .map(|(n, p)| format!("Disque {n} · {} · {}", p.title(), fmt_size(p.size)))
-                    .unwrap_or_else(|| "Choisir une partition...".into());
+                    .map(|(n, p)| crate::trf!("Disque {n} · {} · {}", "Disk {n} · {} · {}", p.title(), fmt_size(p.size)))
+                    .unwrap_or_else(|| crate::tr!("Choisir une partition...", "Choose a partition...").into());
                 egui::ComboBox::from_id_salt("psrc").width(420.0).selected_text(txt).show_ui(ui, |ui| {
                     for (n, p) in &parts {
-                        ui.selectable_value(&mut self.clone_psrc, Some((*n, p.offset)), format!("Disque {n} · {} · {} · {}", p.title(), p.fs.name(), fmt_size(p.size)));
+                        ui.selectable_value(&mut self.clone_psrc, Some((*n, p.offset)), crate::trf!("Disque {n} · {} · {} · {}", "Disk {n} · {} · {} · {}", p.title(), p.fs.name(), fmt_size(p.size)));
                     }
                 });
                 ui.add_space(6.0);
-                ui.label(RichText::new("2. Espace non alloué cible").strong());
+                ui.label(RichText::new(crate::tr!("2. Espace non alloué cible", "2. Target unallocated space")).strong());
                 let need = self.clone_psrc.and_then(|(n, o)| parts.iter().find(|(m, p)| *m == n && p.offset == o)).map(|(_, p)| p.size).unwrap_or(0);
                 let frees: Vec<(u32, u64, u64)> = disks
                     .iter()
@@ -1191,21 +1201,21 @@ impl App {
                 let txt = self
                     .clone_pdst
                     .and_then(|(n, o)| frees.iter().find(|f| f.0 == n && f.1 == o))
-                    .map(|f| format!("Disque {} · non alloué · {}", f.0, fmt_size(f.2)))
-                    .unwrap_or_else(|| "Choisir un espace libre...".into());
+                    .map(|f| crate::trf!("Disque {} · non alloué · {}", "Disk {} · unallocated · {}", f.0, fmt_size(f.2)))
+                    .unwrap_or_else(|| crate::tr!("Choisir un espace libre...", "Choose some free space...").into());
                 egui::ComboBox::from_id_salt("pdst").width(420.0).selected_text(txt).show_ui(ui, |ui| {
                     for f in &frees {
                         let ok = f.2 >= need;
                         ui.add_enabled_ui(ok, |ui| {
-                            ui.selectable_value(&mut self.clone_pdst, Some((f.0, f.1)), format!("Disque {} · non alloué · {}{}", f.0, fmt_size(f.2), if ok { "" } else { " (trop petit)" }));
+                            ui.selectable_value(&mut self.clone_pdst, Some((f.0, f.1)), crate::trf!("Disque {} · non alloué · {}{}", "Disk {} · unallocated · {}{}", f.0, fmt_size(f.2), if ok { "" } else { crate::tr!(" (trop petit)", " (too small)") }));
                         });
                     }
                 });
                 if frees.is_empty() {
-                    ui.label(RichText::new("Aucun espace non alloué : réduisez ou supprimez d'abord une partition.").color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Aucun espace non alloué : réduisez ou supprimez d'abord une partition.", "No unallocated space: shrink or delete a partition first.")).color(MUTED));
                 }
                 ui.add_space(6.0);
-                if primary(ui, "Ajouter à la file d'attente", self.clone_psrc.is_some() && self.clone_pdst.is_some()) {
+                if primary(ui, crate::tr!("Ajouter à la file d'attente", "Add to the queue"), self.clone_psrc.is_some() && self.clone_pdst.is_some()) {
                     let (sn, so) = self.clone_psrc.unwrap();
                     let (dn, dof) = self.clone_pdst.unwrap();
                     acts.push(Act::Add(Op::ClonePart { src_disk: sn, src_offset: so, dst_disk: dn, dst_offset: dof }));
@@ -1216,39 +1226,39 @@ impl App {
     }
 
     fn page_migrate(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
-        heading(ui, "Migrer Windows", "Déplacez Windows, vos programmes et vos fichiers vers un SSD ou un nouveau disque, puis démarrez dessus.");
+        heading(ui, crate::tr!("Migrer Windows", "Migrate Windows"), crate::tr!("Déplacez Windows, vos programmes et vos fichiers vers un SSD ou un nouveau disque, puis démarrez dessus.", "Move Windows, your programs and your files to an SSD or a new disk, then start the PC from it."));
         let disks = self.preview.clone();
         let Some(sys) = disks.iter().find(|d| d.is_system || d.is_boot) else {
             card(ui, |ui| {
-                ui.label("Le disque de Windows n'a pas été trouvé.");
+                ui.label(crate::tr!("Le disque de Windows n'a pas été trouvé.", "The Windows disk was not found."));
             });
             return;
         };
         card(ui, |ui| {
-            ui.label(RichText::new("Disque actuel de Windows").strong());
-            ui.label(format!("Disque {} · {} · {} · {} à copier", sys.number, sys.model, sys.type_name(), fmt_size(sys.used_extent())));
+            ui.label(RichText::new(crate::tr!("Disque actuel de Windows", "Current Windows disk")).strong());
+            ui.label(crate::trf!("Disque {} · {} · {} · {} à copier", "Disk {} · {} · {} · {} to copy", sys.number, sys.model, sys.type_name(), fmt_size(sys.used_extent())));
         });
         ui.add_space(10.0);
-        ui.label(RichText::new("Choisissez le disque cible").size(15.0).strong());
+        ui.label(RichText::new(crate::tr!("Choisissez le disque cible", "Choose the target disk")).size(15.0).strong());
         for d in disks.iter().filter(|d| d.number != sys.number) {
             let fits = d.size >= sys.used_extent() + gpt_tail_sectors(sys.sector) * sys.sector;
             let sel = self.mig_dst == Some(d.number);
             let resp = egui::Frame::none()
                 .fill(if sel { ACCENT.gamma_multiply(0.08) } else { CARD })
                 .rounding(10.0)
-                .stroke(Stroke::new(if sel { 2.0 } else { 1.0 }, if sel { ACCENT } else { LINE }))
+                .stroke(Stroke::new(if sel { 2.0_f32 } else { 1.0 }, if sel { ACCENT } else { LINE }))
                 .inner_margin(12.0)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("Disque {}", d.number)).strong());
+                        ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).strong());
                         ui.label(&d.model);
                         ui.label(RichText::new(fmt_size(d.size)).color(MUTED));
                         if d.bus.contains("NVMe") || d.model.to_lowercase().contains("ssd") {
                             badge(ui, "SSD", ACCENT);
                         }
                         if !fits {
-                            badge(ui, "Trop petit", DANGER);
+                            badge(ui, crate::tr!("Trop petit", "Too small"), DANGER);
                         }
                     });
                 })
@@ -1260,37 +1270,37 @@ impl App {
             ui.add_space(4.0);
         }
         ui.add_space(6.0);
-        ui.checkbox(&mut self.fit, "Utiliser tout l'espace du disque cible (agrandir la dernière partition)");
-        ui.label(RichText::new("Après la copie, DiskCraft reconstruit le démarrage du nouveau disque : il suffit ensuite de le choisir dans le menu de démarrage du PC.").color(MUTED));
+        ui.checkbox(&mut self.fit, crate::tr!("Utiliser tout l'espace du disque cible (agrandir la dernière partition)", "Use all the space of the target disk (extend the last partition)"));
+        ui.label(RichText::new(crate::tr!("Après la copie, DiskCraft reconstruit le démarrage du nouveau disque : il suffit ensuite de le choisir dans le menu de démarrage du PC.", "After the copy, DiskCraft rebuilds the new disk's boot files: then just pick it in the PC's boot menu.")).color(MUTED));
         if let Some(t) = self.mig_dst {
-            ui.label(RichText::new(format!("⚠ Tout le contenu du disque {t} sera remplacé.")).color(DANGER));
+            ui.label(RichText::new(crate::trf!("⚠ Tout le contenu du disque {t} sera remplacé.", "⚠ Everything on disk {t} will be replaced.")).color(DANGER));
         }
-        if primary(ui, "Ajouter la migration à la file d'attente", self.mig_dst.is_some()) {
+        if primary(ui, crate::tr!("Ajouter la migration à la file d'attente", "Add the migration to the queue"), self.mig_dst.is_some()) {
             acts.push(Act::Add(Op::MigrateOs { src: sys.number, dst: self.mig_dst.unwrap(), fit: self.fit }));
             acts.push(Act::Page(Page::Partitions));
         }
     }
 
     fn page_convert(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
-        heading(ui, "Convertisseurs", "Changez le type d'un disque ou d'une partition sans perdre vos données.");
+        heading(ui, crate::tr!("Convertisseurs", "Converters"), crate::tr!("Changez le type d'un disque ou d'une partition sans perdre vos données.", "Change the type of a disk or partition without losing your data."));
         let disks = self.preview.clone();
         card(ui, |ui| {
             ui.label(RichText::new("MBR / GPT").size(15.0).strong());
-            ui.label(RichText::new("GPT est nécessaire pour les disques de plus de 2 To et le démarrage UEFI ; MBR pour les vieux PC en BIOS.").color(MUTED));
+            ui.label(RichText::new(crate::tr!("GPT est nécessaire pour les disques de plus de 2 To et le démarrage UEFI ; MBR pour les vieux PC en BIOS.", "GPT is needed for disks larger than 2 TB and for UEFI boot; MBR for old BIOS PCs.")).color(MUTED));
             disk_combo(ui, "conv", &disks, &mut self.conv_disk, |_| true);
             if let Some(d) = self.conv_disk.and_then(|n| disks.iter().find(|d| d.number == n)) {
                 let n = d.number;
-                ui.label(format!("Type actuel : {}", d.type_name()));
+                ui.label(crate::trf!("Type actuel : {}", "Current type: {}", d.type_name()));
                 ui.horizontal(|ui| {
-                    if primary(ui, "Convertir en GPT", d.style != Style::Gpt) {
+                    if primary(ui, crate::tr!("Convertir en GPT", "Convert to GPT"), d.style != Style::Gpt) {
                         acts.push(Act::Add(Op::ToGpt { disk: n }));
                     }
-                    if primary(ui, "Convertir en MBR", d.style != Style::Mbr) {
+                    if primary(ui, crate::tr!("Convertir en MBR", "Convert to MBR"), d.style != Style::Mbr) {
                         acts.push(Act::Add(Op::ToMbr { disk: n }));
                     }
                 });
                 if d.is_system || d.is_boot {
-                    ui.label(RichText::new("Disque de Windows : la conversion en GPT utilise l'outil mbr2gpt de Windows ; passez ensuite le PC en mode UEFI.").size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Disque de Windows : la conversion en GPT utilise l'outil mbr2gpt de Windows ; passez ensuite le PC en mode UEFI.", "Windows disk: the GPT conversion uses Windows' mbr2gpt tool; then switch the PC to UEFI mode.")).size(12.0).color(MUTED));
                 }
             }
         });
@@ -1299,108 +1309,108 @@ impl App {
         let temp_choices: Vec<char> = letters.iter().map(|l| l.0).collect();
         let parts: Vec<(u32, Partition)> = self.all_parts().into_iter().filter(|(_, p)| p.fs == Fs::Ntfs && !p.protected()).map(|(n, p)| (n, p.clone())).collect();
         card(ui, |ui| {
-            ui.label(RichText::new("NTFS en FAT32").size(15.0).strong());
-            ui.label(RichText::new("FAT32 se lit partout (TV, consoles, voitures, Mac). Limites : fichiers de 4 Go maximum, partition de 2 To maximum.").color(MUTED));
+            ui.label(RichText::new(crate::tr!("NTFS en FAT32", "NTFS to FAT32")).size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("FAT32 se lit partout (TV, consoles, voitures, Mac). Limites : fichiers de 4 Go maximum, partition de 2 To maximum.", "FAT32 can be read everywhere (TVs, consoles, cars, Macs). Limits: files up to 4 GB, partitions up to 2 TB.")).color(MUTED));
             let txt = self
                 .fat_part
                 .and_then(|(n, o)| parts.iter().find(|(m, p)| *m == n && p.offset == o))
-                .map(|(n, p)| format!("Disque {n} · {} · {}", p.title(), fmt_size(p.size)))
-                .unwrap_or_else(|| "Choisir une partition NTFS...".into());
+                .map(|(n, p)| crate::trf!("Disque {n} · {} · {}", "Disk {n} · {} · {}", p.title(), fmt_size(p.size)))
+                .unwrap_or_else(|| crate::tr!("Choisir une partition NTFS...", "Choose an NTFS partition...").into());
             egui::ComboBox::from_id_salt("fat").width(420.0).selected_text(txt).show_ui(ui, |ui| {
                 for (n, p) in &parts {
-                    ui.selectable_value(&mut self.fat_part, Some((*n, p.offset)), format!("Disque {n} · {} · {}", p.title(), fmt_size(p.size)));
+                    ui.selectable_value(&mut self.fat_part, Some((*n, p.offset)), crate::trf!("Disque {n} · {} · {}", "Disk {n} · {} · {}", p.title(), fmt_size(p.size)));
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("Copie temporaire des fichiers sur :");
-                letter_combo(ui, "tmp1", &mut self.temp_drive, &temp_choices, "choisir un lecteur");
+                ui.label(crate::tr!("Copie temporaire des fichiers sur :", "Temporary copy of the files on:"));
+                letter_combo(ui, "tmp1", &mut self.temp_drive, &temp_choices, crate::tr!("choisir un lecteur", "choose a drive"));
                 if let Some(t) = self.temp_drive {
                     if let Some(f) = letters.iter().find(|l| l.0 == t) {
                         ui.label(RichText::new(format!("{} libres", fmt_size(f.1))).color(MUTED));
                     }
                 }
             });
-            if primary(ui, "Ajouter la conversion à la file d'attente", self.fat_part.is_some() && self.temp_drive.is_some()) {
+            if primary(ui, crate::tr!("Ajouter la conversion à la file d'attente", "Add the conversion to the queue"), self.fat_part.is_some() && self.temp_drive.is_some()) {
                 let (n, o) = self.fat_part.unwrap();
                 acts.push(Act::Add(Op::NtfsToFat32 { disk: n, offset: o, temp: self.temp_drive.unwrap() }));
             }
         });
         ui.add_space(10.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Disque dynamique en disque de base").size(15.0).strong());
-            ui.label(RichText::new("Les volumes simples sont copiés à part, le disque est converti, puis les volumes sont recréés avec les mêmes lettres et remplis à nouveau.").color(MUTED));
+            ui.label(RichText::new(crate::tr!("Disque dynamique en disque de base", "Dynamic disk to basic disk")).size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Les volumes simples sont copiés à part, le disque est converti, puis les volumes sont recréés avec les mêmes lettres et remplis à nouveau.", "Simple volumes are copied aside, the disk is converted, then the volumes are recreated with the same letters and filled again.")).color(MUTED));
             disk_combo(ui, "dyn", &disks, &mut self.dyn_disk, |d| d.dynamic);
             if !disks.iter().any(|d| d.dynamic) {
-                ui.label(RichText::new("Aucun disque dynamique sur ce PC.").color(MUTED));
+                ui.label(RichText::new(crate::tr!("Aucun disque dynamique sur ce PC.", "No dynamic disk on this PC.")).color(MUTED));
             }
             ui.horizontal(|ui| {
-                ui.label("Copie temporaire sur :");
-                letter_combo(ui, "tmp2", &mut self.temp_drive, &temp_choices, "choisir un lecteur");
+                ui.label(crate::tr!("Copie temporaire sur :", "Temporary copy on:"));
+                letter_combo(ui, "tmp2", &mut self.temp_drive, &temp_choices, crate::tr!("choisir un lecteur", "choose a drive"));
             });
-            if primary(ui, "Ajouter la conversion à la file d'attente", self.dyn_disk.is_some() && self.temp_drive.is_some()) {
+            if primary(ui, crate::tr!("Ajouter la conversion à la file d'attente", "Add the conversion to the queue"), self.dyn_disk.is_some() && self.temp_drive.is_some()) {
                 acts.push(Act::Add(Op::DynamicToBasic { disk: self.dyn_disk.unwrap(), temp: self.temp_drive.unwrap() }));
             }
         });
     }
 
     fn page_winpe(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
-        heading(ui, "Disque de démarrage WinPE", "Une clé USB ou une image ISO qui démarre n'importe quel PC — même sans Windows, ou sous un vieux Windows (XP, Vista, 7, Server 2003/2008) — avec DiskCraft prêt à l'emploi.");
+        heading(ui, crate::tr!("Disque de démarrage WinPE", "WinPE boot disk"), crate::tr!("Une clé USB ou une image ISO qui démarre n'importe quel PC — même sans Windows, ou sous un vieux Windows (XP, Vista, 7, Server 2003/2008) — avec DiskCraft prêt à l'emploi.", "A USB stick or an ISO image that starts any PC — even without Windows, or with an old Windows (XP, Vista, 7, Server 2003/2008) — with DiskCraft ready to use."));
         let (adk, pe) = winpe::adk_ready();
         card(ui, |ui| {
-            ui.label(RichText::new("1. Outils WinPE gratuits de Microsoft").strong());
+            ui.label(RichText::new(crate::tr!("1. Outils WinPE gratuits de Microsoft", "1. Microsoft's free WinPE tools")).strong());
             if adk && pe {
-                ui.label(RichText::new("✔ Installés").color(ACCENT));
+                ui.label(RichText::new(crate::tr!("✔ Installés", "✔ Installed")).color(ACCENT));
             } else {
-                ui.label(RichText::new("Les outils « Windows ADK » et « WinPE » ne sont pas installés (environ 4 Go, gratuits).").color(MUTED));
-                if primary(ui, "Installer les outils", true) {
-                    acts.push(Act::RunNow(winpe::install_steps(), "Installation des outils WinPE".into()));
+                ui.label(RichText::new(crate::tr!("Les outils « Windows ADK » et « WinPE » ne sont pas installés (environ 4 Go, gratuits).", "The \"Windows ADK\" and \"WinPE\" tools are not installed (about 4 GB, free).")).color(MUTED));
+                if primary(ui, crate::tr!("Installer les outils", "Install the tools"), true) {
+                    acts.push(Act::RunNow(winpe::install_steps(), crate::tr!("Installation des outils WinPE", "Installing the WinPE tools").into()));
                 }
             }
         });
         ui.add_space(10.0);
         let usb: Vec<char> = self.preview.iter().filter(|d| d.bus.eq_ignore_ascii_case("USB") && !d.is_system).flat_map(|d| d.parts.iter().filter_map(|p| p.letter)).collect();
         card(ui, |ui| {
-            ui.label(RichText::new("2. Où écrire le disque de démarrage ?").strong());
-            ui.radio_value(&mut self.pe_iso, true, "Fichier image ISO (à graver ou utiliser dans une machine virtuelle)");
-            ui.radio_value(&mut self.pe_iso, false, "Clé USB (elle sera effacée)");
+            ui.label(RichText::new(crate::tr!("2. Où écrire le disque de démarrage ?", "2. Where should the boot disk be written?")).strong());
+            ui.radio_value(&mut self.pe_iso, true, crate::tr!("Fichier image ISO (à graver ou utiliser dans une machine virtuelle)", "ISO image file (to burn or use in a virtual machine)"));
+            ui.radio_value(&mut self.pe_iso, false, crate::tr!("Clé USB (elle sera effacée)", "USB stick (it will be erased)"));
             if self.pe_iso {
                 ui.horizontal(|ui| {
-                    ui.label("Fichier :");
+                    ui.label(crate::tr!("Fichier :", "File:"));
                     ui.add(egui::TextEdit::singleline(&mut self.pe_path).desired_width(420.0));
                 });
             } else {
                 ui.horizontal(|ui| {
-                    ui.label("Clé USB :");
-                    letter_combo(ui, "usb", &mut self.pe_usb, &usb, "choisir");
+                    ui.label(crate::tr!("Clé USB :", "USB stick:"));
+                    letter_combo(ui, "usb", &mut self.pe_usb, &usb, crate::tr!("choisir", "choose"));
                 });
                 if usb.is_empty() {
-                    ui.label(RichText::new("Branchez une clé USB puis cliquez sur « Actualiser ».").color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Branchez une clé USB puis cliquez sur « Actualiser ».", "Plug in a USB stick, then click \"Refresh\".")).color(MUTED));
                 }
             }
         });
         ui.add_space(10.0);
         let ready = adk && pe && ((self.pe_iso && !self.pe_path.trim().is_empty()) || (!self.pe_iso && self.pe_usb.is_some()));
-        if primary(ui, "Créer le disque de démarrage", ready) {
+        if primary(ui, crate::tr!("Créer le disque de démarrage", "Create the boot disk"), ready) {
             let t = if self.pe_iso { winpe::Target::Iso(self.pe_path.trim().to_string()) } else { winpe::Target::Usb(self.pe_usb.unwrap()) };
-            acts.push(Act::RunNow(winpe::build_steps(&t), "Création du disque de démarrage".into()));
+            acts.push(Act::RunNow(winpe::build_steps(&t), crate::tr!("Création du disque de démarrage", "Creating the boot disk").into()));
         }
     }
 
     fn page_support(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Aide & support gratuit", "DiskCraft est un logiciel libre : l'aide est gratuite et ouverte à tous.");
+        heading(ui, crate::tr!("Aide & support gratuit", "Free help & support"), crate::tr!("DiskCraft est un logiciel libre : l'aide est gratuite et ouverte à tous.", "DiskCraft is free software: help is free and open to everyone."));
         card(ui, |ui| {
-            ui.label(RichText::new("Obtenir de l'aide").size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Obtenir de l'aide", "Get help")).size(15.0).strong());
             ui.horizontal_wrapped(|ui| {
-                if primary(ui, "Poser une question / signaler un problème", true) {
-                    open_url("https://github.com/diskcraft/diskcraft/issues");
+                if primary(ui, crate::tr!("Poser une question / signaler un problème", "Ask a question / report a problem"), true) {
+                    open_url("https://github.com/Wikiabo-Labs/CraftDisk/issues");
                 }
-                if ui.button("Guide en ligne").clicked() {
-                    open_url("https://github.com/diskcraft/diskcraft/wiki");
+                if ui.button(crate::tr!("Guide en ligne", "Online guide")).clicked() {
+                    open_url("https://github.com/Wikiabo-Labs/CraftDisk#readme");
                 }
-                if ui.button("Copier les informations de mes disques").clicked() {
+                if ui.button(crate::tr!("Copier les informations de mes disques", "Copy my disk information")).clicked() {
                     let mut s = format!("DiskCraft {}\n", env!("CARGO_PKG_VERSION"));
                     for d in &self.preview {
-                        s += &format!("Disque {} : {} {} {}\n", d.number, d.model, fmt_size(d.size), d.type_name());
+                        s += &crate::trf!("Disque {} : {} {} {}\n", "Disk {}: {} {} {}\n", d.number, d.model, fmt_size(d.size), d.type_name());
                         for p in &d.parts {
                             s += &format!("  {} {} {} {}\n", p.title(), p.fs.name(), fmt_size(p.size), p.kind.name());
                         }
@@ -1408,18 +1418,18 @@ impl App {
                     ui.output_mut(|o| o.copied_text = s);
                 }
             });
-            ui.label(RichText::new("Joignez les informations copiées et le journal de l'opération : la communauté vous répond gratuitement.").color(MUTED).size(12.0));
+            ui.label(RichText::new(crate::tr!("Joignez les informations copiées et le journal de l'opération : la communauté vous répond gratuitement.", "Attach the copied information and the operation log: the community answers for free.")).color(MUTED).size(12.0));
         });
         ui.add_space(10.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Questions fréquentes").size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Questions fréquentes", "Frequently asked questions")).size(15.0).strong());
             let faq = [
-                ("Mes données sont-elles en sécurité ?", "Rien n'est modifié avant que vous cliquiez sur « Exécuter ». Les opérations qui gardent les données (redimensionner, fusionner, convertir, cloner) sont conçues pour ne rien perdre, mais une coupure de courant pendant l'opération peut tout casser : faites toujours une sauvegarde avant."),
-                ("Pourquoi Windows demande-t-il une autorisation ?", "Modifier un disque demande les droits d'administrateur. DiskCraft lance alors un petit assistant qui exécute la file d'attente et écrit un journal."),
-                ("Je ne peux pas agrandir C: : pourquoi ?", "Il faut un espace non alloué juste après C:. Souvent une partition de récupération est placée entre les deux : supprimez ou déplacez la partition voisine, puis agrandissez C:."),
-                ("Mon nouveau SSD est plus petit que mon disque dur.", "Réduisez d'abord la dernière partition du disque actuel (Redimensionner) pour que tout tienne, puis lancez la migration."),
-                ("Après la migration, le PC démarre toujours sur l'ancien disque.", "Ouvrez le menu de démarrage du PC (souvent F12, F8 ou Échap au démarrage) et choisissez le nouveau disque, ou débranchez l'ancien."),
-                ("Quelles versions de Windows sont prises en charge ?", "DiskCraft fonctionne sous Windows 10 et 11 et Windows Server 2016, 2019, 2022 et 2025. Pour un PC sous un Windows plus ancien, créez le disque de démarrage WinPE : il démarre n'importe quel PC."),
+                (crate::tr!("Mes données sont-elles en sécurité ?", "Is my data safe?"), crate::tr!("Rien n'est modifié avant que vous cliquiez sur « Exécuter ». Les opérations qui gardent les données (redimensionner, fusionner, convertir, cloner) sont conçues pour ne rien perdre, mais une coupure de courant pendant l'opération peut tout casser : faites toujours une sauvegarde avant.", "Nothing is changed before you click \"Execute\". Operations that keep data (resize, merge, convert, clone) are designed to lose nothing, but a power cut during an operation can break everything: always make a backup first.")),
+                (crate::tr!("Pourquoi Windows demande-t-il une autorisation ?", "Why does Windows ask for permission?"), crate::tr!("Modifier un disque demande les droits d'administrateur. DiskCraft lance alors un petit assistant qui exécute la file d'attente et écrit un journal.", "Changing a disk needs administrator rights. DiskCraft then starts a small helper that runs the queue and writes a log.")),
+                (crate::tr!("Je ne peux pas agrandir C: : pourquoi ?", "Why can't I extend C:?"), crate::tr!("Il faut un espace non alloué juste après C:. Souvent une partition de récupération est placée entre les deux : supprimez ou déplacez la partition voisine, puis agrandissez C:.", "There must be unallocated space right after C:. Often a recovery partition sits in between: delete or move that neighbouring partition, then extend C:.")),
+                (crate::tr!("Mon nouveau SSD est plus petit que mon disque dur.", "My new SSD is smaller than my hard drive."), crate::tr!("Réduisez d'abord la dernière partition du disque actuel (Redimensionner) pour que tout tienne, puis lancez la migration.", "First shrink the last partition of the current disk (Resize) so everything fits, then start the migration.")),
+                (crate::tr!("Après la migration, le PC démarre toujours sur l'ancien disque.", "After the migration, the PC still starts from the old disk."), crate::tr!("Ouvrez le menu de démarrage du PC (souvent F12, F8 ou Échap au démarrage) et choisissez le nouveau disque, ou débranchez l'ancien.", "Open the PC's boot menu (often F12, F8 or Esc at startup) and choose the new disk, or unplug the old one.")),
+                (crate::tr!("Quelles versions de Windows sont prises en charge ?", "Which versions of Windows are supported?"), crate::tr!("DiskCraft fonctionne sous Windows 10 et 11 et Windows Server 2016, 2019, 2022 et 2025. Pour un PC sous un Windows plus ancien, créez le disque de démarrage WinPE : il démarre n'importe quel PC.", "DiskCraft runs on Windows 10 and 11 and Windows Server 2016, 2019, 2022 and 2025. For a PC with an older Windows, create the WinPE boot disk: it starts any PC.")),
             ];
             for (q, a) in faq {
                 egui::CollapsingHeader::new(RichText::new(q).strong()).show(ui, |ui| {
@@ -1429,33 +1439,56 @@ impl App {
         });
     }
 
-    fn page_about(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "DiskCraft", &format!("Version {} — gestionnaire de partitions libre et gratuit", env!("CARGO_PKG_VERSION")));
+    fn page_settings(&mut self, ui: &mut egui::Ui) {
+        heading(ui, crate::tr!("Paramètres", "Settings"), crate::tr!("Préférences de DiskCraft.", "DiskCraft preferences."));
         card(ui, |ui| {
-            ui.label(RichText::new("Fonctions").size(15.0).strong());
+            ui.label(RichText::new(format!("🌐  {}", crate::tr!("Langue", "Language"))).size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Le choix est mémorisé pour les prochains lancements.", "Your choice is remembered for next launches.")).color(MUTED));
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let en = crate::i18n::en();
+                for (label, english) in [("English", true), ("Français", false)] {
+                    let sel = en == english;
+                    let b = egui::Button::new(RichText::new(label).size(13.5).color(if sel { Color32::WHITE } else { TEXT }))
+                        .fill(if sel { ACCENT } else { Color32::TRANSPARENT })
+                        .stroke(Stroke::new(1.0_f32, if sel { ACCENT } else { LINE }))
+                        .rounding(14.0);
+                    if ui.add(b).clicked() && !sel {
+                        crate::i18n::set_english(english);
+                        ui.ctx().request_repaint();
+                    }
+                }
+            });
+        });
+    }
+
+    fn page_about(&mut self, ui: &mut egui::Ui) {
+        heading(ui, "DiskCraft", &crate::trf!("Version {} — gestionnaire de partitions libre et gratuit", "Version {} — a free, open-source partition manager", env!("CARGO_PKG_VERSION")));
+        card(ui, |ui| {
+            ui.label(RichText::new(crate::tr!("Fonctions", "Features")).size(15.0).strong());
             for f in [
-                "Redimensionner, fusionner, créer, formater, supprimer, effacer et vérifier les partitions",
-                "Cloner des disques et des partitions (copie à chaud grâce aux instantanés)",
-                "Migrer Windows vers un SSD ou un disque dur, avec réparation du démarrage",
-                "Convertir MBR en GPT et GPT en MBR sans perte de données",
-                "Convertir NTFS en FAT32, formater en FAT32 au-delà de 32 Go",
-                "Transformer un disque dynamique en disque de base",
-                "Créer un disque de démarrage WinPE",
-                "Support technique gratuit par la communauté",
+                crate::tr!("Redimensionner, fusionner, créer, formater, supprimer, effacer et vérifier les partitions", "Resize, move, merge, create, format, delete, wipe and check partitions"),
+                crate::tr!("Cloner des disques et des partitions (copie à chaud grâce aux instantanés)", "Clone disks and partitions (live copy thanks to snapshots)"),
+                crate::tr!("Migrer Windows vers un SSD ou un disque dur, avec réparation du démarrage", "Migrate Windows to an SSD or a hard drive, with boot repair"),
+                crate::tr!("Convertir MBR en GPT et GPT en MBR sans perte de données", "Convert MBR to GPT and GPT to MBR without data loss"),
+                crate::tr!("Convertir NTFS en FAT32, formater en FAT32 au-delà de 32 Go", "Convert NTFS to FAT32, format FAT32 beyond 32 GB"),
+                crate::tr!("Transformer un disque dynamique en disque de base", "Turn a dynamic disk into a basic disk"),
+                crate::tr!("Créer un disque de démarrage WinPE", "Create a WinPE boot disk"),
+                crate::tr!("Support technique gratuit par la communauté", "Free technical support from the community"),
             ] {
                 ui.label(format!("✔  {f}"));
             }
         });
         ui.add_space(10.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Compatibilité").size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Compatibilité", "Compatibility")).size(15.0).strong());
             ui.label("Windows 11, Windows 10 · Windows Server 2025, 2022, 2019, 2016");
-            ui.label(RichText::new("Windows plus anciens (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server) : utilisez le disque de démarrage WinPE, qui démarre ces PC et gère leurs disques.").color(MUTED));
+            ui.label(RichText::new(crate::tr!("Windows plus anciens (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server) : utilisez le disque de démarrage WinPE, qui démarre ces PC et gère leurs disques.", "Older Windows (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server): use the WinPE boot disk, which starts these PCs and manages their disks.")).color(MUTED));
         });
         ui.add_space(10.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Licence").size(15.0).strong());
-            ui.label("Logiciel libre sous licence GNU GPL version 3 ou ultérieure : vous pouvez l'utiliser, l'étudier, le modifier et le partager librement, pour toujours, gratuitement.");
+            ui.label(RichText::new(crate::tr!("Licence", "License")).size(15.0).strong());
+            ui.label(crate::tr!("Logiciel libre sous licence GNU GPL version 3 ou ultérieure : vous pouvez l'utiliser, l'étudier, le modifier et le partager librement, pour toujours, gratuitement.", "Free software under the GNU GPL version 3 or later: you can use, study, change and share it freely, forever, at no cost."));
         });
     }
 
@@ -1466,17 +1499,17 @@ impl App {
         let mut open = true;
         let mut close = false;
         let title = match &dlg {
-            Dlg::Resize { .. } => "Redimensionner / déplacer la partition".to_string(),
-            Dlg::Create { .. } => "Créer une partition".to_string(),
-            Dlg::Format { .. } => "Formater la partition".to_string(),
-            Dlg::Delete { .. } => "Supprimer la partition".to_string(),
-            Dlg::Wipe { offset: None, .. } => "Effacer le disque".to_string(),
-            Dlg::Wipe { .. } => "Effacer la partition".to_string(),
-            Dlg::Merge { .. } => "Fusionner des partitions".to_string(),
-            Dlg::Letter { .. } => "Lettre de lecteur".to_string(),
-            Dlg::Label { .. } => "Nom de la partition".to_string(),
-            Dlg::Check { .. } => "Vérifier la partition".to_string(),
-            Dlg::Confirm { .. } => "Exécuter les opérations".to_string(),
+            Dlg::Resize { .. } => crate::tr!("Redimensionner / déplacer la partition", "Resize / move partition").to_string(),
+            Dlg::Create { .. } => crate::tr!("Créer une partition", "Create a partition").to_string(),
+            Dlg::Format { .. } => crate::tr!("Formater la partition", "Format partition").to_string(),
+            Dlg::Delete { .. } => crate::tr!("Supprimer la partition", "Delete partition").to_string(),
+            Dlg::Wipe { offset: None, .. } => crate::tr!("Effacer le disque", "Wipe disk").to_string(),
+            Dlg::Wipe { .. } => crate::tr!("Effacer la partition", "Wipe partition").to_string(),
+            Dlg::Merge { .. } => crate::tr!("Fusionner des partitions", "Merge partitions").to_string(),
+            Dlg::Letter { .. } => crate::tr!("Lettre de lecteur", "Drive letter").to_string(),
+            Dlg::Label { .. } => crate::tr!("Nom de la partition", "Partition label").to_string(),
+            Dlg::Check { .. } => crate::tr!("Vérifier la partition", "Check partition").to_string(),
+            Dlg::Confirm { .. } => crate::tr!("Exécuter les opérations", "Execute operations").to_string(),
             Dlg::Message { title, .. } => title.clone(),
         };
         let free_letters = self.free_letters();
@@ -1495,9 +1528,9 @@ impl App {
                 let (min_mb, max_mb) = if *can_resize { (((*min / MIB) as f64).min(cur_mb), total_mb) } else { (cur_mb, cur_mb) };
 
                 ui.label(RichText::new(if *can_move {
-                    "Faites glisser la partition (en bleu) sur la carte du disque pour la poser où vous voulez dans un espace libre, puis réglez sa taille en dessous."
+                    crate::tr!("Faites glisser la partition (en bleu) sur la carte du disque pour la poser où vous voulez dans un espace libre, puis réglez sa taille en dessous.", "Drag the partition (in blue) on the disk map to drop it anywhere in free space, then set its size below.")
                 } else {
-                    "Faites glisser les bords de la barre du bas pour changer la taille de la partition."
+                    crate::tr!("Faites glisser les bords de la barre du bas pour changer la taille de la partition.", "Drag the edges of the bottom bar to change the partition's size.")
                 }).color(MUTED));
                 ui.add_space(6.0);
 
@@ -1636,9 +1669,9 @@ impl App {
                     }
                 }
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Disque {} · {} · {}", dk.number, fmt_size(dk.size), dk.type_name())).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", dk.number, fmt_size(dk.size), dk.type_name())).size(12.0).color(MUTED));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add_enabled(*can_resize, egui::Button::new("Remplir tout l'espace non alloué").rounding(6.0)).clicked() {
+                        if ui.add_enabled(*can_resize, egui::Button::new(crate::tr!("Remplir tout l'espace non alloué", "Fill all unallocated space")).rounding(6.0)).clicked() {
                             if *can_move {
                                 *pos = rs;
                             }
@@ -1652,7 +1685,7 @@ impl App {
                 let (rs, re) = regions[regions.iter().position(|r| *pos >= r.0 && *pos < r.1).unwrap_or(0)];
                 let total_mb = ((re - rs) / MIB) as f64;
                 let mut start_mb = ((*pos - rs) / MIB) as f64;
-                ui.label(RichText::new(format!("Espace où se trouve la partition : {}", fmt_size(re - rs))).strong());
+                ui.label(RichText::new(crate::trf!("Espace où se trouve la partition : {}", "Space the partition sits in: {}", fmt_size(re - rs))).strong());
                 let zw = 640.0f32;
                 let (rect, _) = ui.allocate_exact_size(Vec2::new(zw, 46.0), Sense::hover());
                 let px_per_mb = zw / total_mb.max(1.0) as f32;
@@ -1706,17 +1739,17 @@ impl App {
                 }
                 ui.add_space(6.0);
                 egui::Grid::new("resize_grid").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
-                    ui.label("Espace non alloué avant :");
-                    ui.add_enabled(*can_move, egui::DragValue::new(&mut start_mb).range(0.0..=(total_mb - *size_mb).max(0.0)).speed(16.0).suffix(" Mo"));
+                    ui.label(crate::tr!("Espace non alloué avant :", "Unallocated space before:"));
+                    ui.add_enabled(*can_move, egui::DragValue::new(&mut start_mb).range(0.0..=(total_mb - *size_mb).max(0.0)).speed(16.0).suffix(crate::tr!(" Mo", " MB")));
                     ui.label(RichText::new(fmt_size((start_mb as u64) * MIB)).color(MUTED));
                     ui.end_row();
-                    ui.label("Taille de la partition :");
-                    ui.add_enabled(*can_resize, egui::DragValue::new(size_mb).range(min_mb..=(total_mb - start_mb).min(max_mb).max(min_mb)).speed(16.0).suffix(" Mo"));
+                    ui.label(crate::tr!("Taille de la partition :", "Partition size:"));
+                    ui.add_enabled(*can_resize, egui::DragValue::new(size_mb).range(min_mb..=(total_mb - start_mb).min(max_mb).max(min_mb)).speed(16.0).suffix(crate::tr!(" Mo", " MB")));
                     ui.label(RichText::new(fmt_size((*size_mb as u64) * MIB)).color(MUTED));
                     ui.end_row();
                     let mut after = (total_mb - start_mb - *size_mb).max(0.0);
-                    ui.label("Espace non alloué après :");
-                    if ui.add_enabled(*can_resize || *can_move, egui::DragValue::new(&mut after).range(0.0..=(total_mb - start_mb - min_mb).max(0.0)).speed(16.0).suffix(" Mo")).changed() {
+                    ui.label(crate::tr!("Espace non alloué après :", "Unallocated space after:"));
+                    if ui.add_enabled(*can_resize || *can_move, egui::DragValue::new(&mut after).range(0.0..=(total_mb - start_mb - min_mb).max(0.0)).speed(16.0).suffix(crate::tr!(" Mo", " MB"))).changed() {
                         if *can_resize {
                             *size_mb = (total_mb - start_mb - after).clamp(min_mb, max_mb);
                         } else {
@@ -1732,14 +1765,14 @@ impl App {
                     *pos = (rs + (start_mb as u64) * MIB).min(re.saturating_sub(size_of(*size_mb))).max(rs);
                 }
                 if !*can_resize {
-                    ui.label(RichText::new("Ce système de fichiers peut être déplacé mais pas redimensionné (seul NTFS se redimensionne).").size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Ce système de fichiers peut être déplacé mais pas redimensionné (seul NTFS se redimensionne).", "This file system can be moved but not resized (only NTFS can be resized).")).size(12.0).color(MUTED));
                 }
                 if !*can_move {
-                    ui.label(RichText::new("Windows utilise cette partition : elle peut changer de taille mais pas de place. Pour la déplacer, démarrez sur le disque de démarrage DiskCraft.").size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Windows utilise cette partition : elle peut changer de taille mais pas de place. Pour la déplacer, démarrez sur le disque de démarrage DiskCraft.", "Windows is using this partition: its size can change but not its place. To move it, start the PC from the DiskCraft boot disk.")).size(12.0).color(MUTED));
                 }
                 let moving = *pos != *offset;
                 if moving {
-                    ui.label(RichText::new("⚠ Déplacer recopie toutes les données de la partition : comptez plusieurs minutes et ne coupez surtout pas le courant.").color(PENDING));
+                    ui.label(RichText::new(crate::tr!("⚠ Déplacer recopie toutes les données de la partition : comptez plusieurs minutes et ne coupez surtout pas le courant.", "⚠ Moving copies all of the partition's data: allow several minutes and do not cut the power.")).color(PENDING));
                 }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -1748,22 +1781,22 @@ impl App {
                         acts.push(Act::Add(Op::Resize { disk: *disk, offset: *offset, new_offset: *pos, new_size }));
                         close = true;
                     }
-                    if ui.add(egui::Button::new("Annuler").rounding(6.0)).clicked() {
+                    if ui.add(egui::Button::new(crate::tr!("Annuler", "Cancel")).rounding(6.0)).clicked() {
                         close = true;
                     }
                 });
             }
             Dlg::Create { disk, offset, max, size_mb, fs, label, letter } => {
                 let maxm = (*max / MIB) as f64;
-                ui.add(egui::Slider::new(size_mb, 1.0..=maxm.max(1.0)).text("Mo").step_by(1.0));
+                ui.add(egui::Slider::new(size_mb, 1.0..=maxm.max(1.0)).text(crate::tr!("Mo", "MB")).step_by(1.0));
                 fs_choice(ui, fs);
                 ui.horizontal(|ui| {
-                    ui.label("Nom :");
+                    ui.label(crate::tr!("Nom :", "Label:"));
                     ui.text_edit_singleline(label);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Lettre :");
-                    letter_combo(ui, "newl", letter, &free_letters, "aucune");
+                    ui.label(crate::tr!("Lettre :", "Letter:"));
+                    letter_combo(ui, "newl", letter, &free_letters, crate::tr!("aucune", "none"));
                 });
                 if primary(ui, "OK", true) {
                     acts.push(Act::Add(Op::Create { disk: *disk, offset: *offset, size: (*size_mb as u64 * MIB).min(*max), fs: fs.clone(), label: label.clone(), letter: *letter }));
@@ -1773,39 +1806,39 @@ impl App {
             Dlg::Format { disk, offset, fs, label, cluster, quick } => {
                 fs_choice(ui, fs);
                 ui.horizontal(|ui| {
-                    ui.label("Nom :");
+                    ui.label(crate::tr!("Nom :", "Label:"));
                     ui.text_edit_singleline(label);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Taille de cluster :");
-                    let txt = if *cluster == 0 { "Par défaut".to_string() } else { format!("{} Ko", *cluster as f32 / 1024.0) };
+                    ui.label(crate::tr!("Taille de cluster :", "Cluster size:"));
+                    let txt = if *cluster == 0 { crate::tr!("Par défaut", "Default").to_string() } else { crate::trf!("{} Ko", "{} KB", *cluster as f32 / 1024.0) };
                     egui::ComboBox::from_id_salt("clu").selected_text(txt).show_ui(ui, |ui| {
-                        ui.selectable_value(cluster, 0, "Par défaut");
+                        ui.selectable_value(cluster, 0, crate::tr!("Par défaut", "Default"));
                         for c in [512u32, 1024, 2048, 4096, 8192, 16384, 32768, 65536] {
-                            ui.selectable_value(cluster, c, format!("{} Ko", c as f32 / 1024.0));
+                            ui.selectable_value(cluster, c, crate::trf!("{} Ko", "{} KB", c as f32 / 1024.0));
                         }
                     });
                 });
-                ui.checkbox(quick, "Formatage rapide");
-                ui.label(RichText::new("⚠ Toutes les données de la partition seront perdues.").color(DANGER));
+                ui.checkbox(quick, crate::tr!("Formatage rapide", "Quick format"));
+                ui.label(RichText::new(crate::tr!("⚠ Toutes les données de la partition seront perdues.", "⚠ All data on the partition will be lost.")).color(DANGER));
                 if primary(ui, "OK", true) {
                     acts.push(Act::Add(Op::Format { disk: *disk, offset: *offset, fs: fs.clone(), label: label.clone(), cluster: *cluster, quick: *quick }));
                     close = true;
                 }
             }
             Dlg::Delete { disk, offset } => {
-                ui.label("La partition deviendra de l'espace non alloué.");
-                ui.label(RichText::new("⚠ Toutes ses données seront perdues.").color(DANGER));
-                if primary(ui, "Supprimer", true) {
+                ui.label(crate::tr!("La partition deviendra de l'espace non alloué.", "The partition will become unallocated space."));
+                ui.label(RichText::new(crate::tr!("⚠ Toutes ses données seront perdues.", "⚠ All its data will be lost.")).color(DANGER));
+                if primary(ui, crate::tr!("Supprimer", "Delete"), true) {
                     acts.push(Act::Add(Op::Delete { disk: *disk, offset: *offset }));
                     close = true;
                 }
             }
             Dlg::Wipe { disk, offset, passes } => {
-                ui.label("Les données sont écrasées et ne pourront plus être récupérées, même avec un logiciel spécialisé.");
-                ui.add(egui::Slider::new(passes, 1..=10).text("passe(s)"));
-                ui.label(RichText::new("Chaque passe sauf la dernière écrit des données aléatoires ; la dernière écrit des zéros.").size(12.0).color(MUTED));
-                if primary(ui, "Effacer", true) {
+                ui.label(crate::tr!("Les données sont écrasées et ne pourront plus être récupérées, même avec un logiciel spécialisé.", "The data is overwritten and can no longer be recovered, even with specialised software."));
+                ui.add(egui::Slider::new(passes, 1..=10).text(crate::tr!("passe(s)", "pass(es)")));
+                ui.label(RichText::new(crate::tr!("Chaque passe sauf la dernière écrit des données aléatoires ; la dernière écrit des zéros.", "Every pass but the last writes random data; the last one writes zeros.")).size(12.0).color(MUTED));
+                if primary(ui, crate::tr!("Effacer", "Wipe"), true) {
                     acts.push(Act::Add(match offset {
                         Some(o) => Op::WipePart { disk: *disk, offset: *o, passes: *passes },
                         None => Op::WipeDisk { disk: *disk, passes: *passes },
@@ -1816,13 +1849,13 @@ impl App {
             Dlg::Merge { disk, first } => {
                 if let Some(d) = preview.iter().find(|d| d.number == *disk) {
                     if let (Some(i), Some(j)) = (d.part_at(*first), d.next_part(*first)) {
-                        ui.label(format!("{} et {} deviendront une seule partition de {}.", d.parts[i].title(), d.parts[j].title(), fmt_size(d.parts[j].end() - d.parts[i].offset)));
+                        ui.label(crate::trf!("{} et {} deviendront une seule partition de {}.", "{} and {} will become a single {} partition.", d.parts[i].title(), d.parts[j].title(), fmt_size(d.parts[j].end() - d.parts[i].offset)));
                         if let Some(l) = d.parts[j].letter {
-                            ui.label(format!("Le contenu de {l}: sera copié dans le dossier « Contenu de {l} » de la première partition."));
+                            ui.label(crate::trf!("Le contenu de {l}: sera copié dans le dossier « Contenu de {l} » de la première partition.", "The contents of {l}: will be copied into the folder \"Contents of {l}\" on the first partition."));
                         }
                     }
                 }
-                if primary(ui, "Fusionner", true) {
+                if primary(ui, crate::tr!("Fusionner", "Merge"), true) {
                     acts.push(Act::Add(Op::Merge { disk: *disk, first: *first }));
                     close = true;
                 }
@@ -1835,8 +1868,8 @@ impl App {
                     }
                 }
                 ui.horizontal(|ui| {
-                    ui.label("Lettre :");
-                    letter_combo(ui, "letter", letter, &choices, "aucune (masquer)");
+                    ui.label(crate::tr!("Lettre :", "Letter:"));
+                    letter_combo(ui, "letter", letter, &choices, crate::tr!("aucune (masquer)", "none (hide)"));
                 });
                 if primary(ui, "OK", true) {
                     acts.push(Act::Add(Op::SetLetter { disk: *disk, offset: *offset, letter: *letter }));
@@ -1851,28 +1884,28 @@ impl App {
                 }
             }
             Dlg::Check { disk, offset, mode } => {
-                ui.radio_value(mode, 0, "Rechercher les erreurs (sans rien modifier)");
-                ui.radio_value(mode, 1, "Rechercher et réparer les erreurs");
-                ui.radio_value(mode, 2, "Test de surface (lire chaque secteur)");
-                ui.label(RichText::new("La vérification se lance tout de suite ; elle ne passe pas par la file d'attente.").size(12.0).color(MUTED));
-                if primary(ui, "Lancer", true) {
+                ui.radio_value(mode, 0, crate::tr!("Rechercher les erreurs (sans rien modifier)", "Look for errors (without changing anything)"));
+                ui.radio_value(mode, 1, crate::tr!("Rechercher et réparer les erreurs", "Look for and repair errors"));
+                ui.radio_value(mode, 2, crate::tr!("Test de surface (lire chaque secteur)", "Surface test (read every sector)"));
+                ui.label(RichText::new(crate::tr!("La vérification se lance tout de suite ; elle ne passe pas par la file d'attente.", "The check starts right away; it does not go through the queue.")).size(12.0).color(MUTED));
+                if primary(ui, crate::tr!("Lancer", "Start"), true) {
                     if let Some(d) = preview.iter().find(|d| d.number == *disk) {
                         if let Some(i) = d.part_at(*offset) {
-                            acts.push(Act::RunNow(ops::check_steps(d, &d.parts[i], *mode), "Vérification de la partition".into()));
+                            acts.push(Act::RunNow(ops::check_steps(d, &d.parts[i], *mode), crate::tr!("Vérification de la partition", "Checking the partition").into()));
                         }
                     }
                     close = true;
                 }
             }
             Dlg::Confirm { backup_ok } => {
-                ui.label("Ces opérations vont être appliquées à vos disques :");
+                ui.label(crate::tr!("Ces opérations vont être appliquées à vos disques :", "These operations will be applied to your disks:"));
                 for (i, o) in ops_list.iter().enumerate() {
                     ui.label(format!("{}. {o}", i + 1));
                 }
                 let ok = matches!(plan, Some(Ok(_)));
                 match &plan {
                     Some(Ok(steps)) => {
-                        egui::CollapsingHeader::new(format!("Voir les {} étapes détaillées", steps.len())).show(ui, |ui| {
+                        egui::CollapsingHeader::new(crate::trf!("Voir les {} étapes détaillées", "Show the {} detailed steps", steps.len())).show(ui, |ui| {
                             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                                 for (i, s) in steps.iter().enumerate() {
                                     ui.label(RichText::new(format!("{}. {}", i + 1, s.title())).strong());
@@ -1889,9 +1922,9 @@ impl App {
                     None => {}
                 }
                 ui.add_space(6.0);
-                ui.checkbox(backup_ok, "J'ai sauvegardé mes fichiers importants et le PC restera branché");
-                ui.label(RichText::new("Ne coupez pas le courant pendant l'opération.").size(12.0).color(MUTED));
-                if primary(ui, "Exécuter maintenant", *backup_ok && ok) {
+                ui.checkbox(backup_ok, crate::tr!("J'ai sauvegardé mes fichiers importants et le PC restera branché", "I have backed up my important files and the PC will stay plugged in"));
+                ui.label(RichText::new(crate::tr!("Ne coupez pas le courant pendant l'opération.", "Do not cut the power during the operation.")).size(12.0).color(MUTED));
+                if primary(ui, crate::tr!("Exécuter maintenant", "Execute now"), *backup_ok && ok) {
                     acts.push(Act::Execute);
                     close = true;
                 }
@@ -1918,13 +1951,13 @@ impl App {
                         ui.label(&r.step);
                     });
                     ui.add(egui::ProgressBar::new(r.pct).show_percentage());
-                    ui.label(RichText::new("Ne coupez pas le courant et ne débranchez pas les disques.").color(MUTED).size(12.0));
+                    ui.label(RichText::new(crate::tr!("Ne coupez pas le courant et ne débranchez pas les disques.", "Do not cut the power or unplug the disks.")).color(MUTED).size(12.0));
                 }
                 Some(true) => {
-                    ui.label(RichText::new("✔ Terminé avec succès").size(16.0).color(ACCENT).strong());
+                    ui.label(RichText::new(crate::tr!("✔ Terminé avec succès", "✔ Completed successfully")).size(16.0).color(ACCENT).strong());
                 }
                 Some(false) => {
-                    ui.label(RichText::new("⚠ L'opération s'est arrêtée").size(16.0).color(DANGER).strong());
+                    ui.label(RichText::new(crate::tr!("⚠ L'opération s'est arrêtée", "⚠ The operation stopped")).size(16.0).color(DANGER).strong());
                 }
             }
             egui::ScrollArea::vertical().max_height(200.0).stick_to_bottom(true).show(ui, |ui| {
@@ -1934,10 +1967,10 @@ impl App {
             });
             if r.done.is_some() {
                 ui.horizontal(|ui| {
-                    if primary(ui, "Fermer", true) {
+                    if primary(ui, crate::tr!("Fermer", "Close"), true) {
                         acts.push(Act::Reload);
                     }
-                    if ui.button("Ouvrir le journal").clicked() {
+                    if ui.button(crate::tr!("Ouvrir le journal", "Open the log")).clicked() {
                         open_url(&r.log.display().to_string());
                     }
                 });
@@ -1948,7 +1981,7 @@ impl App {
 
 fn fs_choice(ui: &mut egui::Ui, fs: &mut Fs) {
     ui.horizontal(|ui| {
-        ui.label("Système de fichiers :");
+        ui.label(crate::tr!("Système de fichiers :", "File system:"));
         for f in [Fs::Ntfs, Fs::Fat32, Fs::ExFat] {
             let name = f.name();
             ui.selectable_value(fs, f, name);

@@ -60,10 +60,10 @@ pub fn load_disks() -> Result<Vec<Disk>, String> {
         text.push_str(l);
         text.push('\n');
     })?;
-    let start = text.find('[').ok_or_else(|| format!("Réponse inattendue : {}", text.trim()))?;
+    let start = text.find('[').ok_or_else(|| crate::trf!("Réponse inattendue : {}", "Unexpected answer: {}", text.trim()))?;
     let raw: Vec<RawDisk> = serde_json::from_str(text[start..].trim()).map_err(|e| e.to_string())?;
     if raw.is_empty() {
-        return Err("Aucun disque n'a été trouvé (droits insuffisants ?)".into());
+        return Err(crate::tr!("Aucun disque n'a été trouvé (droits insuffisants ?)", "No disk was found (not enough rights?)").into());
     }
     Ok(raw.into_iter().map(convert).collect())
 }
@@ -125,7 +125,7 @@ fn convert(d: RawDisk) -> Disk {
         .collect();
     Disk {
         number: d.number,
-        model: d.model.unwrap_or_else(|| "Disque".into()),
+        model: d.model.unwrap_or_else(|| crate::tr!("Disque", "Disk").into()),
         size: d.size,
         sector,
         style,
@@ -160,7 +160,7 @@ pub fn demo_disks() -> Vec<Disk> {
     vec![
         Disk {
             number: 0,
-            model: "SSD NVMe exemple".into(),
+            model: crate::tr!("SSD NVMe exemple", "Example NVMe SSD").into(),
             size: 512 * GIB,
             sector: 512,
             style: Style::Gpt,
@@ -180,7 +180,7 @@ pub fn demo_disks() -> Vec<Disk> {
         },
         Disk {
             number: 1,
-            model: "Disque dur exemple".into(),
+            model: crate::tr!("Disque dur exemple", "Example hard drive").into(),
             size: 1000 * GIB,
             sector: 512,
             style: Style::Mbr,
@@ -191,15 +191,15 @@ pub fn demo_disks() -> Vec<Disk> {
             offline: false,
             uid: "demo-1".into(),
             parts: vec![
-                p(1, MIB, 300 * GIB, Some('D'), Fs::Ntfs, "Données", Some(120 * GIB), Kind::Data),
+                p(1, MIB, 300 * GIB, Some('D'), Fs::Ntfs, crate::tr!("Données", "Data"), Some(120 * GIB), Kind::Data),
                 p(2, MIB + 300 * GIB, 200 * GIB, Some('E'), Fs::Ntfs, "Photos", Some(150 * GIB), Kind::Data),
-                p(3, MIB + 600 * GIB, 64 * GIB, Some('F'), Fs::ExFat, "Échange", Some(8 * GIB), Kind::Data),
+                p(3, MIB + 600 * GIB, 64 * GIB, Some('F'), Fs::ExFat, crate::tr!("Échange", "Exchange"), Some(8 * GIB), Kind::Data),
             ],
             pending: false,
         },
         Disk {
             number: 2,
-            model: "Clé USB exemple".into(),
+            model: crate::tr!("Clé USB exemple", "Example USB stick").into(),
             size: 32 * GIB,
             sector: 512,
             style: Style::Mbr,

@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 //! DiskCraft — free, open-source disk and partition manager.
 
+#[macro_use]
+mod i18n;
 mod fat32;
 mod gpt;
 mod logo;
@@ -15,6 +17,7 @@ mod worker;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    i18n::init();
 
     // Elevated helper mode: carry out a plan written by the window.
     if let Some(i) = args.iter().position(|a| a == "--worker") {

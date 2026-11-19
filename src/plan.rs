@@ -41,19 +41,19 @@ impl Step {
         match self {
             Step::Ps { script } => {
                 let first = script.lines().find(|l| l.trim_start().starts_with("# ")).unwrap_or("# Commande");
-                first.trim_start().trim_start_matches("# ").to_string()
+                crate::i18n::step_title(first.trim_start().trim_start_matches("# "))
             }
-            Step::CloneDisk { src, dst, .. } => format!("Copie du disque {src} vers le disque {dst}"),
-            Step::ClonePart { src_disk, dst_disk, .. } => format!("Copie d'une partition du disque {src_disk} vers le disque {dst_disk}"),
-            Step::MovePart { disk, .. } => format!("Déplacement d'une partition sur le disque {disk}"),
-            Step::FixIds { disk, .. } => format!("Nouveaux identifiants pour le disque {disk}"),
-            Step::FixBoot { disk, .. } => format!("Réparation du démarrage sur le disque {disk}"),
-            Step::WipeDisk { disk, passes } => format!("Effacement du disque {disk} ({passes} passe(s))"),
-            Step::WipePart { disk, passes, .. } => format!("Effacement d'une partition du disque {disk} ({passes} passe(s))"),
-            Step::ToGpt { disk, .. } => format!("Conversion du disque {disk} en GPT"),
-            Step::ToMbr { disk, .. } => format!("Conversion du disque {disk} en MBR"),
-            Step::FormatFat32 { disk, .. } => format!("Formatage FAT32 sur le disque {disk}"),
-            Step::SurfaceTest { disk, .. } => format!("Test de surface sur le disque {disk}"),
+            Step::CloneDisk { src, dst, .. } => crate::trf!("Copie du disque {src} vers le disque {dst}", "Copying disk {src} to disk {dst}"),
+            Step::ClonePart { src_disk, dst_disk, .. } => crate::trf!("Copie d'une partition du disque {src_disk} vers le disque {dst_disk}", "Copying a partition from disk {src_disk} to disk {dst_disk}"),
+            Step::MovePart { disk, .. } => crate::trf!("Déplacement d'une partition sur le disque {disk}", "Moving a partition on disk {disk}"),
+            Step::FixIds { disk, .. } => crate::trf!("Nouveaux identifiants pour le disque {disk}", "New identifiers for disk {disk}"),
+            Step::FixBoot { disk, .. } => crate::trf!("Réparation du démarrage sur le disque {disk}", "Repairing boot on disk {disk}"),
+            Step::WipeDisk { disk, passes } => crate::trf!("Effacement du disque {disk} ({passes} passe(s))", "Wiping disk {disk} ({passes} pass(es))"),
+            Step::WipePart { disk, passes, .. } => crate::trf!("Effacement d'une partition du disque {disk} ({passes} passe(s))", "Wiping a partition on disk {disk} ({passes} pass(es))"),
+            Step::ToGpt { disk, .. } => crate::trf!("Conversion du disque {disk} en GPT", "Converting disk {disk} to GPT"),
+            Step::ToMbr { disk, .. } => crate::trf!("Conversion du disque {disk} en MBR", "Converting disk {disk} to MBR"),
+            Step::FormatFat32 { disk, .. } => crate::trf!("Formatage FAT32 sur le disque {disk}", "FAT32 formatting on disk {disk}"),
+            Step::SurfaceTest { disk, .. } => crate::trf!("Test de surface sur le disque {disk}", "Surface test on disk {disk}"),
         }
     }
 }

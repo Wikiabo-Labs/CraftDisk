@@ -32,13 +32,13 @@ pub fn ps_quote(s: &str) -> String {
 }
 
 fn disk_mut(disks: &mut [Disk], n: u32) -> Result<&mut Disk, String> {
-    disks.iter_mut().find(|d| d.number == n).ok_or_else(|| format!("Le disque {n} n'existe plus."))
+    disks.iter_mut().find(|d| d.number == n).ok_or_else(|| crate::trf!("Le disque {n} n'existe plus.", "Disk {n} no longer exists."))
 }
 pub fn disk_ref(disks: &[Disk], n: u32) -> Result<&Disk, String> {
-    disks.iter().find(|d| d.number == n).ok_or_else(|| format!("Le disque {n} n'existe plus."))
+    disks.iter().find(|d| d.number == n).ok_or_else(|| crate::trf!("Le disque {n} n'existe plus.", "Disk {n} no longer exists."))
 }
 fn part_of(d: &Disk, offset: u64) -> Result<usize, String> {
-    d.part_at(offset).ok_or_else(|| "Cette partition n'existe plus (une autre opération l'a changée).".to_string())
+    d.part_at(offset).ok_or_else(|| crate::tr!("Cette partition n'existe plus (une autre opération l'a changée).", "This partition no longer exists (another operation changed it).").to_string())
 }
 
 /// Smallest size a partition can be shrunk to: used space plus 10 % (estimated margin).
@@ -71,31 +71,31 @@ impl Op {
         match self {
             Op::Resize { disk, offset, new_offset, new_size } => {
                 if new_offset != offset {
-                    let dir = if new_offset < offset { "vers la gauche" } else { "vers la droite" };
-                    format!("Déplacer {} de {} {dir}, taille {} (disque {disk})", pname(*disk, *offset), fmt_size(new_offset.abs_diff(*offset)), fmt_size(*new_size))
+                    let dir = if new_offset < offset { crate::tr!("vers la gauche", "to the left") } else { crate::tr!("vers la droite", "to the right") };
+                    crate::trf!("Déplacer {} de {} {dir}, taille {} (disque {disk})", "Move {} by {} {dir}, size {} (disk {disk})", pname(*disk, *offset), fmt_size(new_offset.abs_diff(*offset)), fmt_size(*new_size))
                 } else {
-                    format!("Redimensionner {} à {} (disque {disk})", pname(*disk, *offset), fmt_size(*new_size))
+                    crate::trf!("Redimensionner {} à {} (disque {disk})", "Resize {} to {} (disk {disk})", pname(*disk, *offset), fmt_size(*new_size))
                 }
             }
-            Op::Create { disk, size, fs, .. } => format!("Créer une partition {} de {} sur le disque {disk}", fs.name(), fmt_size(*size)),
-            Op::Format { disk, offset, fs, .. } => format!("Formater {} en {} (disque {disk})", pname(*disk, *offset), fs.name()),
-            Op::Delete { disk, offset } => format!("Supprimer {} (disque {disk})", pname(*disk, *offset)),
-            Op::WipePart { disk, offset, passes } => format!("Effacer {} en {passes} passe(s) (disque {disk})", pname(*disk, *offset)),
-            Op::WipeDisk { disk, passes } => format!("Effacer tout le disque {disk} en {passes} passe(s)"),
-            Op::Merge { disk, first } => format!("Fusionner {} avec la partition suivante (disque {disk})", pname(*disk, *first)),
+            Op::Create { disk, size, fs, .. } => crate::trf!("Créer une partition {} de {} sur le disque {disk}", "Create a {} partition of {} on disk {disk}", fs.name(), fmt_size(*size)),
+            Op::Format { disk, offset, fs, .. } => crate::trf!("Formater {} en {} (disque {disk})", "Format {} as {} (disk {disk})", pname(*disk, *offset), fs.name()),
+            Op::Delete { disk, offset } => crate::trf!("Supprimer {} (disque {disk})", "Delete {} (disk {disk})", pname(*disk, *offset)),
+            Op::WipePart { disk, offset, passes } => crate::trf!("Effacer {} en {passes} passe(s) (disque {disk})", "Wipe {} with {passes} pass(es) (disk {disk})", pname(*disk, *offset)),
+            Op::WipeDisk { disk, passes } => crate::trf!("Effacer tout le disque {disk} en {passes} passe(s)", "Wipe the whole disk {disk} with {passes} pass(es)"),
+            Op::Merge { disk, first } => crate::trf!("Fusionner {} avec la partition suivante (disque {disk})", "Merge {} with the next partition (disk {disk})", pname(*disk, *first)),
             Op::SetLetter { disk, offset, letter } => match letter {
-                Some(l) => format!("Donner la lettre {l}: à {} (disque {disk})", pname(*disk, *offset)),
-                None => format!("Masquer {} (retirer sa lettre)", pname(*disk, *offset)),
+                Some(l) => crate::trf!("Donner la lettre {l}: à {} (disque {disk})", "Give letter {l}: to {} (disk {disk})", pname(*disk, *offset)),
+                None => crate::trf!("Masquer {} (retirer sa lettre)", "Hide {} (remove its letter)", pname(*disk, *offset)),
             },
-            Op::SetLabel { disk, offset, label } => format!("Renommer {} en « {label} » (disque {disk})", pname(*disk, *offset)),
-            Op::SetActive { disk, offset } => format!("Rendre active {} (disque {disk})", pname(*disk, *offset)),
-            Op::ClonePart { src_disk, src_offset, dst_disk, .. } => format!("Cloner {} (disque {src_disk}) vers le disque {dst_disk}", pname(*src_disk, *src_offset)),
-            Op::CloneDisk { src, dst, .. } => format!("Cloner le disque {src} vers le disque {dst}"),
-            Op::MigrateOs { src, dst, .. } => format!("Migrer Windows du disque {src} vers le disque {dst}"),
-            Op::ToGpt { disk } => format!("Convertir le disque {disk} en GPT"),
-            Op::ToMbr { disk } => format!("Convertir le disque {disk} en MBR"),
-            Op::NtfsToFat32 { disk, offset, temp } => format!("Convertir {} de NTFS en FAT32 (copie temporaire sur {temp}:) (disque {disk})", pname(*disk, *offset)),
-            Op::DynamicToBasic { disk, temp } => format!("Convertir le disque dynamique {disk} en disque de base (copie temporaire sur {temp}:)"),
+            Op::SetLabel { disk, offset, label } => crate::trf!("Renommer {} en « {label} » (disque {disk})", "Rename {} to \"{label}\" (disk {disk})", pname(*disk, *offset)),
+            Op::SetActive { disk, offset } => crate::trf!("Rendre active {} (disque {disk})", "Set {} active (disk {disk})", pname(*disk, *offset)),
+            Op::ClonePart { src_disk, src_offset, dst_disk, .. } => crate::trf!("Cloner {} (disque {src_disk}) vers le disque {dst_disk}", "Clone {} (disk {src_disk}) to disk {dst_disk}", pname(*src_disk, *src_offset)),
+            Op::CloneDisk { src, dst, .. } => crate::trf!("Cloner le disque {src} vers le disque {dst}", "Clone disk {src} to disk {dst}"),
+            Op::MigrateOs { src, dst, .. } => crate::trf!("Migrer Windows du disque {src} vers le disque {dst}", "Migrate Windows from disk {src} to disk {dst}"),
+            Op::ToGpt { disk } => crate::trf!("Convertir le disque {disk} en GPT", "Convert disk {disk} to GPT"),
+            Op::ToMbr { disk } => crate::trf!("Convertir le disque {disk} en MBR", "Convert disk {disk} to MBR"),
+            Op::NtfsToFat32 { disk, offset, temp } => crate::trf!("Convertir {} de NTFS en FAT32 (copie temporaire sur {temp}:) (disque {disk})", "Convert {} from NTFS to FAT32 (temporary copy on {temp}:) (disk {disk})", pname(*disk, *offset)),
+            Op::DynamicToBasic { disk, temp } => crate::trf!("Convertir le disque dynamique {disk} en disque de base (copie temporaire sur {temp}:)", "Convert dynamic disk {disk} to a basic disk (temporary copy on {temp}:)"),
         }
     }
 
@@ -111,36 +111,36 @@ impl Op {
                 let moved = new_offset != offset;
                 let resized = *new_size != p.size;
                 if !moved && !resized {
-                    return Err("Rien n'a changé.".into());
+                    return Err(crate::tr!("Rien n'a changé.", "Nothing changed.").into());
                 }
                 if resized && !matches!(p.fs, Fs::Ntfs | Fs::Refs) {
-                    return Err("Veuillez convertir la partition en NTFS, puis réessayer (Windows ne redimensionne que NTFS). Elle peut quand même être déplacée sans changer de taille.".into());
+                    return Err(crate::tr!("Veuillez convertir la partition en NTFS, puis réessayer (Windows ne redimensionne que NTFS). Elle peut quand même être déplacée sans changer de taille.", "Please convert the partition to NTFS, then try again (Windows only resizes NTFS). It can still be moved without changing its size.").into());
                 }
                 if *new_size < p.size && p.fs != Fs::Ntfs {
-                    return Err("Seules les partitions NTFS peuvent être réduites.".into());
+                    return Err(crate::tr!("Seules les partitions NTFS peuvent être réduites.", "Only NTFS partitions can be shrunk.").into());
                 }
                 if resized && *new_size < min_size(p) {
-                    return Err(format!("La taille minimale est {}.", fmt_size(min_size(p))));
+                    return Err(crate::trf!("La taille minimale est {}.", "The minimum size is {}.", fmt_size(min_size(p))));
                 }
                 let in_own = *new_offset >= lo && *new_offset + *new_size <= hi;
                 // Or anywhere else on the disk, inside one free area (the partition jumps over its neighbours).
                 let in_other = moved
                     && d.segments().iter().any(|s| matches!(s, Segment::Free { offset: o, size: z } if *new_offset >= *o && *new_offset + *new_size <= *o + *z));
                 if !in_own && !in_other {
-                    return Err("Pas assez d'espace non alloué à cet endroit pour la partition sélectionnée.".into());
+                    return Err(crate::tr!("Pas assez d'espace non alloué à cet endroit pour la partition sélectionnée.", "Not enough unallocated space at this place for the selected partition.").into());
                 }
                 if moved {
                     if p.protected() {
-                        return Err("Windows utilise cette partition en ce moment : pour la déplacer, démarrez le PC sur le disque de démarrage DiskCraft (WinPE).".into());
+                        return Err(crate::tr!("Windows utilise cette partition en ce moment : pour la déplacer, démarrez le PC sur le disque de démarrage DiskCraft (WinPE).", "Windows is using this partition right now: to move it, start the PC from the DiskCraft boot disk (WinPE).").into());
                     }
                     if matches!(p.kind, Kind::Logical | Kind::Extended | Kind::LdmData | Kind::LdmMeta) {
-                        return Err("Les partitions logiques et dynamiques ne peuvent pas être déplacées.".into());
+                        return Err(crate::tr!("Les partitions logiques et dynamiques ne peuvent pas être déplacées.", "Logical and dynamic partitions cannot be moved.").into());
                     }
                     if new_offset % MIB != 0 {
-                        return Err("La nouvelle position doit être alignée sur 1 Mo.".into());
+                        return Err(crate::tr!("La nouvelle position doit être alignée sur 1 Mo.", "The new position must be aligned to 1 MB.").into());
                     }
                     if d.style == Style::Mbr && d.offset_end_ok(*new_offset + *new_size).is_err() {
-                        return Err("Sur un disque MBR, une partition ne peut pas dépasser 2 To depuis le début du disque.".into());
+                        return Err(crate::tr!("Sur un disque MBR, une partition ne peut pas dépasser 2 To depuis le début du disque.", "On an MBR disk, a partition cannot go beyond 2 TB from the start of the disk.").into());
                     }
                 }
                 let p = &mut d.parts[i];
@@ -151,23 +151,23 @@ impl Op {
             Op::Create { disk, offset, size, fs, label, letter } => {
                 let d = disk_mut(disks, *disk)?;
                 if d.style == Style::Raw {
-                    return Err("Initialisez d'abord le disque (Convertir en GPT ou MBR).".into());
+                    return Err(crate::tr!("Initialisez d'abord le disque (Convertir en GPT ou MBR).", "Initialize the disk first (Convert to GPT or MBR).").into());
                 }
                 if d.dynamic {
-                    return Err("Convertissez d'abord le disque en disque de base.".into());
+                    return Err(crate::tr!("Convertissez d'abord le disque en disque de base.", "Convert the disk to a basic disk first.").into());
                 }
                 let free = d.segments().into_iter().find_map(|s| match s {
                     Segment::Free { offset: o, size: s } if o <= *offset && *offset + *size <= o + s => Some(()),
                     _ => None,
                 });
                 if free.is_none() || *size < MIB {
-                    return Err("Pas assez d'espace non alloué à cet endroit.".into());
+                    return Err(crate::tr!("Pas assez d'espace non alloué à cet endroit.", "Not enough unallocated space at this place.").into());
                 }
                 if *fs == Fs::Fat32 && *size > 2 * TIB {
-                    return Err("FAT32 est limité à 2 To.".into());
+                    return Err(crate::tr!("FAT32 est limité à 2 To.", "FAT32 is limited to 2 TB.").into());
                 }
                 if d.style == Style::Mbr && d.offset_end_ok(*offset + *size).is_err() {
-                    return Err("Sur un disque MBR, une partition ne peut pas dépasser 2 To depuis le début du disque.".into());
+                    return Err(crate::tr!("Sur un disque MBR, une partition ne peut pas dépasser 2 To depuis le début du disque.", "On an MBR disk, a partition cannot go beyond 2 TB from the start of the disk.").into());
                 }
                 let number = d.parts.iter().map(|p| p.number).max().unwrap_or(0) + 1;
                 d.parts.push(Partition {
@@ -191,13 +191,13 @@ impl Op {
                 let i = part_of(d, *offset)?;
                 let p = &mut d.parts[i];
                 if p.protected() {
-                    return Err("Impossible de formater la partition de Windows en cours d'utilisation.".into());
+                    return Err(crate::tr!("Impossible de formater la partition de Windows en cours d'utilisation.", "The running Windows partition cannot be formatted.").into());
                 }
                 if matches!(p.kind, Kind::LdmData | Kind::LdmMeta | Kind::Msr) {
-                    return Err("Cette partition ne peut pas être formatée ici.".into());
+                    return Err(crate::tr!("Cette partition ne peut pas être formatée ici.", "This partition cannot be formatted here.").into());
                 }
                 if *fs == Fs::Fat32 && p.size > 2 * TIB {
-                    return Err("FAT32 est limité à 2 To.".into());
+                    return Err(crate::tr!("FAT32 est limité à 2 To.", "FAT32 is limited to 2 TB.").into());
                 }
                 p.fs = fs.clone();
                 p.label = label.clone();
@@ -209,10 +209,10 @@ impl Op {
                 let i = part_of(d, *offset)?;
                 let p = &d.parts[i];
                 if p.protected() {
-                    return Err("Impossible de supprimer une partition dont Windows a besoin pour démarrer.".into());
+                    return Err(crate::tr!("Impossible de supprimer une partition dont Windows a besoin pour démarrer.", "A partition Windows needs to start cannot be deleted.").into());
                 }
                 if matches!(p.kind, Kind::LdmData | Kind::LdmMeta) {
-                    return Err("Convertissez d'abord le disque dynamique en disque de base.".into());
+                    return Err(crate::tr!("Convertissez d'abord le disque dynamique en disque de base.", "Convert the dynamic disk to a basic disk first.").into());
                 }
                 d.parts.remove(i);
                 d.pending = true;
@@ -222,10 +222,10 @@ impl Op {
                 let i = part_of(d, *offset)?;
                 let p = &mut d.parts[i];
                 if p.protected() {
-                    return Err("Impossible d'effacer la partition de Windows en cours d'utilisation.".into());
+                    return Err(crate::tr!("Impossible d'effacer la partition de Windows en cours d'utilisation.", "The running Windows partition cannot be wiped.").into());
                 }
                 if !(1..=10).contains(passes) {
-                    return Err("Choisissez de 1 à 10 passes.".into());
+                    return Err(crate::tr!("Choisissez de 1 à 10 passes.", "Choose from 1 to 10 passes.").into());
                 }
                 p.fs = Fs::Raw;
                 p.label.clear();
@@ -235,10 +235,10 @@ impl Op {
             Op::WipeDisk { disk, passes } => {
                 let d = disk_mut(disks, *disk)?;
                 if d.is_system || d.is_boot {
-                    return Err("Impossible d'effacer le disque sur lequel Windows fonctionne.".into());
+                    return Err(crate::tr!("Impossible d'effacer le disque sur lequel Windows fonctionne.", "The disk Windows is running from cannot be wiped.").into());
                 }
                 if !(1..=10).contains(passes) {
-                    return Err("Choisissez de 1 à 10 passes.".into());
+                    return Err(crate::tr!("Choisissez de 1 à 10 passes.", "Choose from 1 to 10 passes.").into());
                 }
                 d.parts.clear();
                 d.style = Style::Raw;
@@ -248,23 +248,23 @@ impl Op {
             Op::Merge { disk, first } => {
                 let d = disk_mut(disks, *disk)?;
                 let i = part_of(d, *first)?;
-                let j = d.next_part(*first).ok_or("Il n'y a pas de partition après celle-ci.")?;
+                let j = d.next_part(*first).ok_or(crate::tr!("Il n'y a pas de partition après celle-ci.", "There is no partition after this one."))?;
                 let (a, b) = (d.parts[i].clone(), d.parts[j].clone());
                 if a.fs != Fs::Ntfs {
-                    return Err("Veuillez convertir la partition en NTFS, puis réessayer.".into());
+                    return Err(crate::tr!("Veuillez convertir la partition en NTFS, puis réessayer.", "Please convert the partition to NTFS, then try again.").into());
                 }
                 if a.letter.is_none() {
-                    return Err("La première partition doit avoir une lettre.".into());
+                    return Err(crate::tr!("La première partition doit avoir une lettre.", "The first partition must have a drive letter.").into());
                 }
                 if b.protected() || b.kind != Kind::Data && b.kind != Kind::Logical {
-                    return Err("La partition suivante ne peut pas être fusionnée (partition système ou spéciale).".into());
+                    return Err(crate::tr!("La partition suivante ne peut pas être fusionnée (partition système ou spéciale).", "The next partition cannot be merged (system or special partition).").into());
                 }
                 if b.letter.is_none() && b.fs != Fs::Raw {
-                    return Err("Donnez d'abord une lettre à la partition suivante pour que son contenu soit copié.".into());
+                    return Err(crate::tr!("Donnez d'abord une lettre à la partition suivante pour que son contenu soit copié.", "Give the next partition a letter first, so its contents can be copied.").into());
                 }
                 let need = b.used.unwrap_or(0);
                 if need > a.free().unwrap_or(0) {
-                    return Err("Pas assez d'espace libre dans la première partition pour accueillir le contenu de la seconde.".into());
+                    return Err(crate::tr!("Pas assez d'espace libre dans la première partition pour accueillir le contenu de la seconde.", "Not enough free space in the first partition for the contents of the second.").into());
                 }
                 let p = &mut d.parts[i];
                 p.size = b.end() - a.offset;
@@ -278,11 +278,11 @@ impl Op {
                 let i = part_of(d, *offset)?;
                 let p = &mut d.parts[i];
                 if p.is_boot {
-                    return Err("La lettre du disque de Windows ne peut pas être changée.".into());
+                    return Err(crate::tr!("La lettre du disque de Windows ne peut pas être changée.", "The Windows drive letter cannot be changed.").into());
                 }
                 if let Some(l) = letter {
                     if taken.contains(l) && p.letter != Some(*l) {
-                        return Err(format!("La lettre {l}: est déjà utilisée."));
+                        return Err(crate::trf!("La lettre {l}: est déjà utilisée.", "Letter {l}: is already in use."));
                     }
                 }
                 p.letter = *letter;
@@ -293,11 +293,11 @@ impl Op {
                 let i = part_of(d, *offset)?;
                 let p = &mut d.parts[i];
                 if p.fs == Fs::Raw {
-                    return Err("Formatez d'abord la partition.".into());
+                    return Err(crate::tr!("Formatez d'abord la partition.", "Format the partition first.").into());
                 }
                 let max = if matches!(p.fs, Fs::Fat32 | Fs::Fat) { 11 } else { 32 };
                 if label.chars().count() > max {
-                    return Err(format!("Le nom est limité à {max} caractères pour {}.", p.fs.name()));
+                    return Err(crate::trf!("Le nom est limité à {max} caractères pour {}.", "The label is limited to {max} characters for {}.", p.fs.name()));
                 }
                 p.label = label.clone();
                 p.pending = true;
@@ -305,11 +305,11 @@ impl Op {
             Op::SetActive { disk, offset } => {
                 let d = disk_mut(disks, *disk)?;
                 if d.style != Style::Mbr {
-                    return Err("Seules les partitions d'un disque MBR peuvent être actives.".into());
+                    return Err(crate::tr!("Seules les partitions d'un disque MBR peuvent être actives.", "Only partitions on an MBR disk can be active.").into());
                 }
                 let i = part_of(d, *offset)?;
                 if d.parts[i].kind == Kind::Logical {
-                    return Err("Une partition logique ne peut pas être active.".into());
+                    return Err(crate::tr!("Une partition logique ne peut pas être active.", "A logical partition cannot be active.").into());
                 }
                 for p in d.parts.iter_mut() {
                     p.is_active = false;
@@ -321,18 +321,18 @@ impl Op {
                 let src = disk_ref(disks, *src_disk)?;
                 let sp = src.parts[part_of(src, *src_offset)?].clone();
                 if matches!(sp.kind, Kind::LdmData | Kind::LdmMeta | Kind::Extended) {
-                    return Err("Cette partition ne peut pas être clonée.".into());
+                    return Err(crate::tr!("Cette partition ne peut pas être clonée.", "This partition cannot be cloned.").into());
                 }
                 let d = disk_mut(disks, *dst_disk)?;
                 if d.style == Style::Raw || d.dynamic {
-                    return Err("Le disque cible doit être un disque de base initialisé.".into());
+                    return Err(crate::tr!("Le disque cible doit être un disque de base initialisé.", "The target disk must be an initialized basic disk.").into());
                 }
                 let fits = d.segments().into_iter().any(|s| matches!(s, Segment::Free { offset, size } if offset == *dst_offset && size >= sp.size));
                 if !fits {
-                    return Err("Pas assez d'espace libre pour cloner cette partition.".into());
+                    return Err(crate::tr!("Pas assez d'espace libre pour cloner cette partition.", "Not enough free space to clone this partition.").into());
                 }
                 if d.style == Style::Mbr && d.offset_end_ok(*dst_offset + sp.size).is_err() {
-                    return Err("Sur un disque MBR, la copie dépasserait la limite de 2 To.".into());
+                    return Err(crate::tr!("Sur un disque MBR, la copie dépasserait la limite de 2 To.", "On an MBR disk, the copy would go beyond the 2 TB limit.").into());
                 }
                 let number = d.parts.iter().map(|p| p.number).max().unwrap_or(0) + 1;
                 d.parts.push(Partition {
@@ -349,26 +349,25 @@ impl Op {
             }
             Op::CloneDisk { src, dst, fit } | Op::MigrateOs { src, dst, fit } => {
                 if src == dst {
-                    return Err("Choisissez deux disques différents.".into());
+                    return Err(crate::tr!("Choisissez deux disques différents.", "Choose two different disks.").into());
                 }
                 let s = disk_ref(disks, *src)?.clone();
                 if matches!(self, Op::MigrateOs { .. }) && !(s.is_system || s.is_boot) {
-                    return Err("Le disque source doit être celui où Windows est installé.".into());
+                    return Err(crate::tr!("Le disque source doit être celui où Windows est installé.", "The source disk must be the one Windows is installed on.").into());
                 }
                 if s.style == Style::Raw || s.parts.is_empty() {
-                    return Err("Le disque source est vide.".into());
+                    return Err(crate::tr!("Le disque source est vide.", "The source disk is empty.").into());
                 }
                 let d = disk_mut(disks, *dst)?;
                 if d.is_system || d.is_boot {
-                    return Err("Le disque de Windows ne peut pas servir de cible.".into());
+                    return Err(crate::tr!("Le disque de Windows ne peut pas servir de cible.", "The Windows disk cannot be the target.").into());
                 }
                 if d.sector != s.sector {
-                    return Err("Les deux disques n'ont pas la même taille de secteur : copie secteur par secteur impossible.".into());
+                    return Err(crate::tr!("Les deux disques n'ont pas la même taille de secteur : copie secteur par secteur impossible.", "The two disks have different sector sizes: a sector-by-sector copy is not possible.").into());
                 }
                 let need = s.used_extent() + if s.style == Style::Gpt { gpt_tail_sectors(s.sector) * s.sector } else { 0 };
                 if d.size < need {
-                    return Err(format!(
-                        "Le disque cible est trop petit : il faut au moins {}. Réduisez d'abord la dernière partition du disque source.",
+                    return Err(crate::trf!("Le disque cible est trop petit : il faut au moins {}. Réduisez d'abord la dernière partition du disque source.", "The target disk is too small: it needs at least {}. Shrink the source disk's last partition first.",
                         fmt_size(need)
                     ));
                 }
@@ -392,23 +391,23 @@ impl Op {
             Op::ToGpt { disk } => {
                 let d = disk_mut(disks, *disk)?;
                 match d.style {
-                    Style::Gpt => return Err("Ce disque est déjà en GPT.".into()),
+                    Style::Gpt => return Err(crate::tr!("Ce disque est déjà en GPT.", "This disk is already GPT.").into()),
                     Style::Raw => {}
                     Style::Mbr => {
                         if d.dynamic {
-                            return Err("Convertissez d'abord le disque dynamique en disque de base.".into());
+                            return Err(crate::tr!("Convertissez d'abord le disque dynamique en disque de base.", "Convert the dynamic disk to a basic disk first.").into());
                         }
                         let head = gpt_head_sectors(d.sector) * d.sector;
                         let tail = gpt_tail_sectors(d.sector) * d.sector;
                         let first = d.parts.iter().filter(|p| p.kind != Kind::Extended).map(|p| p.offset).min().unwrap_or(head);
                         if first < head {
-                            return Err("La conversion est impossible : la première partition commence trop tôt. Redimensionnez-la puis réessayez.".into());
+                            return Err(crate::tr!("La conversion est impossible : la première partition commence trop tôt. Redimensionnez-la puis réessayez.", "The conversion is not possible: the first partition starts too early. Resize it, then try again.").into());
                         }
                         if d.used_extent() > d.size - tail {
-                            return Err("La conversion est impossible : il faut un peu d'espace libre à la fin du disque. Réduisez la dernière partition puis réessayez.".into());
+                            return Err(crate::tr!("La conversion est impossible : il faut un peu d'espace libre à la fin du disque. Réduisez la dernière partition puis réessayez.", "The conversion is not possible: a little free space is needed at the end of the disk. Shrink the last partition, then try again.").into());
                         }
                         if d.parts.iter().filter(|p| p.kind != Kind::Extended).count() > 128 {
-                            return Err("Trop de partitions pour GPT.".into());
+                            return Err(crate::tr!("Trop de partitions pour GPT.", "Too many partitions for GPT.").into());
                         }
                     }
                 }
@@ -425,23 +424,22 @@ impl Op {
             Op::ToMbr { disk } => {
                 let d = disk_mut(disks, *disk)?;
                 match d.style {
-                    Style::Mbr => return Err("Ce disque est déjà en MBR.".into()),
+                    Style::Mbr => return Err(crate::tr!("Ce disque est déjà en MBR.", "This disk is already MBR.").into()),
                     Style::Raw => {}
                     Style::Gpt => {
                         if d.is_system || d.is_boot {
-                            return Err("Le disque de Windows démarre en UEFI et doit rester en GPT.".into());
+                            return Err(crate::tr!("Le disque de Windows démarre en UEFI et doit rester en GPT.", "The Windows disk starts in UEFI mode and must stay GPT.").into());
                         }
                         if d.dynamic {
-                            return Err("Convertissez d'abord le disque dynamique en disque de base.".into());
+                            return Err(crate::tr!("Convertissez d'abord le disque dynamique en disque de base.", "Convert the dynamic disk to a basic disk first.").into());
                         }
                         let keep: Vec<&Partition> = d.parts.iter().filter(|p| p.kind != Kind::Msr).collect();
                         if keep.len() > 4 {
-                            return Err("Un disque MBR accepte au plus 4 partitions principales. Supprimez ou fusionnez des partitions puis réessayez.".into());
+                            return Err(crate::tr!("Un disque MBR accepte au plus 4 partitions principales. Supprimez ou fusionnez des partitions puis réessayez.", "An MBR disk accepts at most 4 primary partitions. Delete or merge partitions, then try again.").into());
                         }
                         let max = mbr_max_bytes(d.sector);
                         if keep.iter().any(|p| p.end() > max) {
-                            return Err(format!(
-                                "Le disque GPT sélectionné ne peut pas être converti en MBR, car il contient une partition qui dépasse {}.",
+                            return Err(crate::trf!("Le disque GPT sélectionné ne peut pas être converti en MBR, car il contient une partition qui dépasse {}.", "The selected GPT disk cannot be converted to MBR, because it contains a partition that goes beyond {}.",
                                 fmt_size(max)
                             ));
                         }
@@ -457,28 +455,28 @@ impl Op {
                     .flat_map(|d| d.parts.iter())
                     .find(|p| p.letter == Some(*temp))
                     .and_then(|p| p.free())
-                    .ok_or_else(|| format!("Le lecteur {temp}: est introuvable."))?;
+                    .ok_or_else(|| crate::trf!("Le lecteur {temp}: est introuvable.", "Drive {temp}: cannot be found."))?;
                 let d = disk_mut(disks, *disk)?;
                 let i = part_of(d, *offset)?;
                 let p = &mut d.parts[i];
                 if p.fs != Fs::Ntfs {
-                    return Err("La partition doit être en NTFS.".into());
+                    return Err(crate::tr!("La partition doit être en NTFS.", "The partition must be NTFS.").into());
                 }
                 if p.protected() {
-                    return Err("La partition de Windows ne peut pas être convertie en FAT32.".into());
+                    return Err(crate::tr!("La partition de Windows ne peut pas être convertie en FAT32.", "The Windows partition cannot be converted to FAT32.").into());
                 }
                 if p.letter.is_none() {
-                    return Err("Donnez d'abord une lettre à la partition.".into());
+                    return Err(crate::tr!("Donnez d'abord une lettre à la partition.", "Give the partition a letter first.").into());
                 }
                 if p.letter == Some(*temp) {
-                    return Err("Choisissez un autre lecteur pour la copie temporaire.".into());
+                    return Err(crate::tr!("Choisissez un autre lecteur pour la copie temporaire.", "Choose another drive for the temporary copy.").into());
                 }
                 if p.size > 2 * TIB {
-                    return Err("FAT32 est limité à 2 To.".into());
+                    return Err(crate::tr!("FAT32 est limité à 2 To.", "FAT32 is limited to 2 TB.").into());
                 }
                 let used = p.used.unwrap_or(p.size);
                 if used + 100 * MIB > tfree {
-                    return Err(format!("Pas assez d'espace libre sur {temp}: pour la copie temporaire ({} nécessaires).", fmt_size(used + 100 * MIB)));
+                    return Err(crate::trf!("Pas assez d'espace libre sur {temp}: pour la copie temporaire ({} nécessaires).", "Not enough free space on {temp}: for the temporary copy ({} needed).", fmt_size(used + 100 * MIB)));
                 }
                 p.fs = Fs::Fat32;
                 p.label = p.label.to_uppercase().chars().take(11).collect();
@@ -490,20 +488,20 @@ impl Op {
                     .flat_map(|d| d.parts.iter())
                     .find(|p| p.letter == Some(*temp))
                     .and_then(|p| p.free())
-                    .ok_or_else(|| format!("Le lecteur {temp}: est introuvable."))?;
+                    .ok_or_else(|| crate::trf!("Le lecteur {temp}: est introuvable.", "Drive {temp}: cannot be found."))?;
                 let d = disk_mut(disks, *disk)?;
                 if !d.dynamic {
-                    return Err("Ce disque est déjà un disque de base.".into());
+                    return Err(crate::tr!("Ce disque est déjà un disque de base.", "This disk is already a basic disk.").into());
                 }
                 if d.is_system || d.is_boot {
-                    return Err("Le disque de Windows ne peut pas être converti pendant qu'il fonctionne.".into());
+                    return Err(crate::tr!("Le disque de Windows ne peut pas être converti pendant qu'il fonctionne.", "The Windows disk cannot be converted while it is running.").into());
                 }
                 if d.parts.iter().any(|p| p.letter == Some(*temp)) {
-                    return Err("La copie temporaire doit aller sur un autre disque.".into());
+                    return Err(crate::tr!("La copie temporaire doit aller sur un autre disque.", "The temporary copy must go to another disk.").into());
                 }
                 let used: u64 = d.parts.iter().filter_map(|p| p.used).sum();
                 if used + 100 * MIB > tfree {
-                    return Err(format!("Pas assez d'espace libre sur {temp}: pour la copie temporaire."));
+                    return Err(crate::trf!("Pas assez d'espace libre sur {temp}: pour la copie temporaire.", "Not enough free space on {temp}: for the temporary copy."));
                 }
                 d.dynamic = false;
                 d.parts.retain(|p| p.kind != Kind::LdmMeta);
@@ -579,11 +577,11 @@ impl Op {
             Op::Merge { disk, first } => {
                 let d = disk_ref(before, *disk)?;
                 let a = &d.parts[part_of(d, *first)?];
-                let b = &d.parts[d.next_part(*first).ok_or("partition suivante")?];
-                let al = a.letter.ok_or("lettre")?;
+                let b = &d.parts[d.next_part(*first).ok_or(crate::tr!("partition suivante", "next partition"))?];
+                let al = a.letter.ok_or(crate::tr!("lettre", "drive letter"))?;
                 let mut s = String::from("# Fusionner deux partitions\n");
                 if let Some(bl) = b.letter {
-                    let folder = format!("{al}:\\Contenu de {bl}");
+                    let folder = crate::trf!("{al}:\\Contenu de {bl}", "{al}:\\Contents of {bl}");
                     s += &format!(
                         "robocopy {bl}:\\ {} /E /COPY:DAT /XJ /R:1 /W:1 /NP /XD 'System Volume Information' '$RECYCLE.BIN'\nif ($LASTEXITCODE -ge 8) {{ throw 'La copie du contenu a échoué.' }}\n",
                         ps_quote(&folder)
@@ -657,13 +655,13 @@ impl Op {
                     }
                 }
                 if let Op::MigrateOs { .. } = self {
-                    let win = s.parts.iter().find(|p| p.is_boot).or_else(|| s.parts.iter().find(|p| p.letter == Some('C'))).ok_or("partition de Windows introuvable")?;
+                    let win = s.parts.iter().find(|p| p.is_boot).or_else(|| s.parts.iter().find(|p| p.letter == Some('C'))).ok_or(crate::tr!("partition de Windows introuvable", "Windows partition not found"))?;
                     let sys = if s.style == Style::Gpt {
                         s.parts.iter().find(|p| p.kind == Kind::Efi)
                     } else {
                         s.parts.iter().find(|p| p.is_active).or(Some(win))
                     }
-                    .ok_or("partition de démarrage introuvable")?;
+                    .ok_or(crate::tr!("partition de démarrage introuvable", "boot partition not found"))?;
                     out.push(Step::FixBoot { disk: *dst, win_offset: win.offset, sys_offset: sys.offset, uefi: s.style == Style::Gpt });
                 }
             }
@@ -693,7 +691,7 @@ impl Op {
             Op::NtfsToFat32 { disk, offset, temp } => {
                 let d = disk_ref(before, *disk)?;
                 let p = &d.parts[part_of(d, *offset)?];
-                let l = p.letter.ok_or("lettre")?;
+                let l = p.letter.ok_or(crate::tr!("lettre", "drive letter"))?;
                 let tmp = ps_quote(&format!("{temp}:\\DiskCraft-FAT32-{l}"));
                 out.push(Step::Ps {
                     script: format!(
