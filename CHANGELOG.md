@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Releases are published automatically from `main` only. Each release carries the patch notes of its version from this changelog, and every past version stays available on the Releases page.
 - Merging copies the files to the root of the first partition. A file whose name is already used there gets the date and time added to its name: `test.txt` becomes `test-11-23-25-20-11-2026.txt` (`HH-mm-ss-dd-MM-yyyy`).
 - The second partition is deleted only after every one of its files is found on the first partition with the same size; otherwise the merge stops and nothing is deleted.
+- DiskCraft asks for administrator rights once, when it opens, instead of before every operation. The helper that runs the queue inherits them.
 
 ### Fixed
 - Merging two partitions no longer seems to lose the files of the second one. They used to be copied into a "Contents of X" folder that robocopy marked hidden and system, so File Explorer did not show it.

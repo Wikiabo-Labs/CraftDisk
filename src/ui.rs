@@ -316,11 +316,32 @@ impl App {
         }
         let _ = std::fs::write(&log_path, "");
         let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
-        // The plan's fingerprint travels on the elevated command line, which cannot be changed after
-        // the administrator agreed: the worker refuses a plan file that was altered meanwhile.
-        let args = format!("--worker \"{}\" \"{}\" {}", plan_path.display(), log_path.display(), crate::worker::sha256_hex(json.as_bytes()));
-        let cmdline = format!("Start-Process -FilePath {} -ArgumentList {} -Verb RunAs -WindowStyle Hidden", ops::ps_quote(&exe), ops::ps_quote(&args));
+        // The plan's fingerprint travels on the worker's command line, which cannot be changed once
+        // started: the worker refuses a plan file that was altered meanwhile.
+        let hash = crate::worker::sha256_hex(json.as_bytes());
         let lp = log_path.clone();
+        if crate::rawio::is_elevated() {
+            // DiskCraft already runs as administrator (asked once at start): the worker inherits it.
+            let (pp, lp2) = (plan_path.clone(), log_path.clone());
+            std::thread::spawn(move || {
+                let mut c = std::process::Command::new(&exe);
+                c.arg("--worker").arg(&pp).arg(&lp2).arg(&hash);
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    c.creation_flags(0x0800_0000);
+                }
+                if c.spawn().is_err() {
+                    let _ = std::fs::write(&lp2, crate::tr!("ERREUR Impossible de lancer l'assistant : rien n'a été modifié.\nFIN ECHEC\n", "ERREUR Could not start the helper: nothing was changed.\nFIN ECHEC\n"));
+                }
+            });
+            self.dialog = None;
+            self.run = Some(Run { log: log_path, title, lines: Vec::new(), step: crate::tr!("Démarrage...", "Starting...").into(), pct: 0.0, done: None, queue, last_read: 0.0 });
+            return;
+        }
+        // Started without administrator rights (e.g. from a terminal): ask for them for this run.
+        let args = format!("--worker \"{}\" \"{}\" {}", plan_path.display(), log_path.display(), hash);
+        let cmdline = format!("Start-Process -FilePath {} -ArgumentList {} -Verb RunAs -WindowStyle Hidden", ops::ps_quote(&exe), ops::ps_quote(&args));
         std::thread::spawn(move || {
             let mut c = std::process::Command::new("powershell.exe");
             c.args(["-NoProfile", "-NonInteractive", "-Command", &cmdline]);
@@ -1425,7 +1446,7 @@ impl App {
             ui.label(RichText::new(crate::tr!("Questions fréquentes", "Frequently asked questions")).size(15.0).strong());
             let faq = [
                 (crate::tr!("Mes données sont-elles en sécurité ?", "Is my data safe?"), crate::tr!("Rien n'est modifié avant que vous cliquiez sur « Exécuter ». Les opérations qui gardent les données (redimensionner, fusionner, convertir, cloner) sont conçues pour ne rien perdre, mais une coupure de courant pendant l'opération peut tout casser : faites toujours une sauvegarde avant.", "Nothing is changed before you click \"Execute\". Operations that keep data (resize, merge, convert, clone) are designed to lose nothing, but a power cut during an operation can break everything: always make a backup first.")),
-                (crate::tr!("Pourquoi Windows demande-t-il une autorisation ?", "Why does Windows ask for permission?"), crate::tr!("Modifier un disque demande les droits d'administrateur. DiskCraft lance alors un petit assistant qui exécute la file d'attente et écrit un journal.", "Changing a disk needs administrator rights. DiskCraft then starts a small helper that runs the queue and writes a log.")),
+                (crate::tr!("Pourquoi Windows demande-t-il une autorisation ?", "Why does Windows ask for permission?"), crate::tr!("Modifier un disque demande les droits d'administrateur : Windows les demande une seule fois, à l'ouverture de DiskCraft. Chaque file d'attente est ensuite exécutée par un petit assistant qui écrit un journal.", "Changing a disk needs administrator rights: Windows asks for them once, when DiskCraft opens. Each queue is then run by a small helper that writes a log.")),
                 (crate::tr!("Je ne peux pas agrandir C: : pourquoi ?", "Why can't I extend C:?"), crate::tr!("Il faut un espace non alloué juste après C:. Souvent une partition de récupération est placée entre les deux : supprimez ou déplacez la partition voisine, puis agrandissez C:.", "There must be unallocated space right after C:. Often a recovery partition sits in between: delete or move that neighbouring partition, then extend C:.")),
                 (crate::tr!("Mon nouveau SSD est plus petit que mon disque dur.", "My new SSD is smaller than my hard drive."), crate::tr!("Réduisez d'abord la dernière partition du disque actuel (Redimensionner) pour que tout tienne, puis lancez la migration.", "First shrink the last partition of the current disk (Resize) so everything fits, then start the migration.")),
                 (crate::tr!("Après la migration, le PC démarre toujours sur l'ancien disque.", "After the migration, the PC still starts from the old disk."), crate::tr!("Ouvrez le menu de démarrage du PC (souvent F12, F8 ou Échap au démarrage) et choisissez le nouveau disque, ou débranchez l'ancien.", "Open the PC's boot menu (often F12, F8 or Esc at startup) and choose the new disk, or unplug the old one.")),
