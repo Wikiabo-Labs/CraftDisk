@@ -49,6 +49,7 @@ fn fs_color(p: &Partition) -> Color32 {
 #[derive(Clone, Copy, PartialEq)]
 pub enum Page {
     Home,
+    Health,
     Partitions,
     Clone,
     Migrate,
@@ -117,6 +118,8 @@ pub struct App {
     ops: Vec<Op>,
     demo: bool,
     loading: Option<Receiver<Result<Vec<Disk>, String>>>,
+    health: std::collections::HashMap<u32, Health>,
+    health_loading: Option<Receiver<Result<std::collections::HashMap<u32, Health>, String>>>,
     load_note: Option<String>,
     page: Page,
     sel: Sel,
@@ -180,6 +183,8 @@ impl App {
             ops: Vec::new(),
             demo,
             loading: None,
+            health: std::collections::HashMap::new(),
+            health_loading: None,
             load_note: None,
             page: Page::Home,
             logo: logo_tex,
@@ -205,6 +210,7 @@ impl App {
         };
         // Optional start page (used to picture each page): DISKCRAFT_PAGE=partitions|clone|...
         app.page = match std::env::var("DISKCRAFT_PAGE").unwrap_or_default().as_str() {
+            "health" => Page::Health,
             "partitions" => Page::Partitions,
             "clone" => Page::Clone,
             "migrate" => Page::Migrate,
@@ -222,6 +228,7 @@ impl App {
     fn reload(&mut self) {
         if self.demo {
             self.set_disks(crate::probe::demo_disks());
+            self.health = crate::probe::demo_health();
             // Picture of the move window (checks only): DISKCRAFT_DIALOG=move with --demo.
             if std::env::var("DISKCRAFT_DIALOG").as_deref() == Ok("move") {
                 let mut d = self.preview[1].clone();
@@ -256,6 +263,12 @@ impl App {
             let _ = tx.send(crate::probe::load_disks());
         });
         self.loading = Some(rx);
+        // SMART values are read at the same time as the disks, in their own thread (slower).
+        let (htx, hrx) = channel();
+        std::thread::spawn(move || {
+            let _ = htx.send(crate::probe::load_health());
+        });
+        self.health_loading = Some(hrx);
     }
 
     fn set_disks(&mut self, d: Vec<Disk>) {
@@ -484,6 +497,16 @@ impl eframe::App for App {
                 }
             }
         }
+        if let Some(rx) = &self.health_loading {
+            if let Ok(res) = rx.try_recv() {
+                self.health_loading = None;
+                if let Ok(h) = res {
+                    self.health = h;
+                } else if self.demo {
+                    self.health = crate::probe::demo_health();
+                }
+            }
+        }
         self.poll_run(now);
 
         let mut acts: Vec<Act> = Vec::new();
@@ -498,6 +521,7 @@ impl eframe::App for App {
         egui::CentralPanel::default().frame(egui::Frame::none().fill(BG).inner_margin(18.0)).show(ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.page {
                 Page::Home => self.page_home(ui, &mut acts),
+                Page::Health => self.page_health(ui),
                 Page::Partitions => self.page_partitions(ui, &mut acts),
                 Page::Clone => self.page_clone(ui, &mut acts),
                 Page::Migrate => self.page_migrate(ui, &mut acts),
@@ -569,7 +593,7 @@ impl eframe::App for App {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             ctx.request_repaint();
-        } else if self.loading.is_some() || self.run.as_ref().is_some_and(|r| r.done.is_none()) {
+        } else if self.loading.is_some() || self.health_loading.is_some() || self.run.as_ref().is_some_and(|r| r.done.is_none()) {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
         }
     }
@@ -591,6 +615,7 @@ impl App {
             ui.add_space(6.0);
             let items = [
                 (Page::Home, "🏠", crate::tr!("Accueil", "Home"), ICON_BLUE),
+                (Page::Health, "♥", crate::tr!("Santé des disques", "Disk health"), ICON_GREEN),
                 (Page::Partitions, "🖴", crate::tr!("Gestionnaire de partitions", "Partition manager"), ICON_TEAL),
                 (Page::Clone, "🗐", crate::tr!("Cloner", "Clone"), ICON_PURPLE),
                 (Page::Migrate, "➡", crate::tr!("Migrer Windows", "Migrate Windows"), ICON_GREEN),
@@ -627,6 +652,7 @@ impl App {
             ui.horizontal_centered(|ui| {
                 let title = match self.page {
                     Page::Home => crate::tr!("Accueil", "Home"),
+                    Page::Health => crate::tr!("Santé des disques (SMART)", "Disk health (SMART)"),
                     Page::Partitions => crate::tr!("Gestionnaire de partitions", "Partition manager"),
                     Page::Clone => crate::tr!("Cloner un disque ou une partition", "Clone a disk or a partition"),
                     Page::Migrate => crate::tr!("Migrer Windows vers un SSD ou un disque dur", "Migrate Windows to an SSD or a hard drive"),
@@ -1458,6 +1484,100 @@ impl App {
                 });
             }
         });
+    }
+
+    fn page_health(&mut self, ui: &mut egui::Ui) {
+        heading(
+            ui,
+            crate::tr!("Santé des disques", "Disk health"),
+            crate::tr!("Valeurs SMART relevées par Windows au démarrage de DiskCraft.", "SMART values read from Windows when DiskCraft starts."),
+        );
+        if self.health_loading.is_some() {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new());
+                ui.label(RichText::new(crate::tr!("Lecture des valeurs SMART...", "Reading SMART values...")).color(MUTED));
+            });
+            ui.add_space(8.0);
+        } else if !self.demo && !crate::rawio::is_elevated() {
+            card(ui, |ui| {
+                ui.label(RichText::new(crate::tr!("⚠  Lancez DiskCraft en administrateur pour lire la température, l'usure et les erreurs des disques.", "⚠  Run DiskCraft as administrator to read the temperature, wear and errors of the disks.")).color(PENDING));
+            });
+            ui.add_space(8.0);
+        }
+        let none = || "—".to_string();
+        for d in self.base.iter() {
+            let h = self.health.get(&d.number);
+            ui.add_space(4.0);
+            card(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).size(15.0).strong());
+                    ui.label(RichText::new(&d.model).color(MUTED));
+                    let (text, color) = match h.map(|h| h.level()).unwrap_or(HealthLevel::Unknown) {
+                        HealthLevel::Good => (crate::tr!("Bon état", "Good"), ICON_GREEN),
+                        HealthLevel::Warning => (crate::tr!("À surveiller", "Needs attention"), PENDING),
+                        HealthLevel::Bad => (crate::tr!("Défaillant : sauvegardez vos données", "Failing: back up your data"), DANGER),
+                        HealthLevel::Unknown => (crate::tr!("Inconnu", "Unknown"), MUTED),
+                    };
+                    badge(ui, text, color);
+                });
+                let Some(h) = h else {
+                    ui.label(RichText::new(crate::tr!("Windows ne fournit aucune information de santé pour ce disque.", "Windows gives no health information for this disk.")).color(MUTED));
+                    return;
+                };
+                ui.add_space(4.0);
+                let hours = |v: Option<u64>| v.map(|h| crate::trf!("{} h ({} jours)", "{} h ({} days)", h, h / 24)).unwrap_or_else(none);
+                let count = |v: Option<u64>| v.map(|n| n.to_string()).unwrap_or_else(none);
+                let errors = |total: Option<u64>, unc: Option<u64>| match (total, unc) {
+                    (None, None) => none(),
+                    (t, u) => crate::trf!("{} (non corrigées : {})", "{} (uncorrected: {})", count(t), count(u)),
+                };
+                let rows: Vec<(&str, String, Option<Color32>)> = vec![
+                    (crate::tr!("État Windows", "Windows status"), if h.status.is_empty() { none() } else { format!("{} · {}", h.status, h.operational) }, None),
+                    (crate::tr!("Type", "Type"), format!("{} · {}", if h.media.is_empty() { "?" } else { &h.media }, if h.bus.is_empty() { &d.bus } else { &h.bus }), None),
+                    (
+                        crate::tr!("Température", "Temperature"),
+                        match (h.temperature, h.temperature_max) {
+                            (Some(t), Some(m)) => crate::trf!("{} °C (max. {} °C)", "{} °C (max {} °C)", t, m),
+                            (Some(t), None) => format!("{t} °C"),
+                            _ => none(),
+                        },
+                        h.temperature.filter(|&t| t >= 70).map(|_| PENDING),
+                    ),
+                    (
+                        crate::tr!("Usure (SSD)", "Wear (SSD)"),
+                        h.wear.map(|w| crate::trf!("{} % utilisés · {} % de durée de vie restante", "{} % used · {} % life left", w, 100u32.saturating_sub(w))).unwrap_or_else(none),
+                        h.wear.filter(|&w| w >= 90).map(|_| PENDING),
+                    ),
+                    (crate::tr!("Heures de fonctionnement", "Power-on hours"), hours(h.power_on_hours), None),
+                    (crate::tr!("Erreurs de lecture", "Read errors"), errors(h.read_errors, h.read_errors_uncorrected), h.read_errors_uncorrected.filter(|&n| n > 0).map(|_| DANGER)),
+                    (crate::tr!("Erreurs d'écriture", "Write errors"), errors(h.write_errors, h.write_errors_uncorrected), h.write_errors_uncorrected.filter(|&n| n > 0).map(|_| DANGER)),
+                    (crate::tr!("Démarrages / arrêts", "Start / stop cycles"), count(h.start_stop_cycles), None),
+                    (crate::tr!("Cycles de tête (HDD)", "Head load cycles (HDD)"), count(h.load_unload_cycles), None),
+                    (
+                        crate::tr!("Prédiction SMART", "SMART prediction"),
+                        match h.predict_failure {
+                            Some(true) => crate::tr!("Panne prévue par le disque", "Failure predicted by the drive").to_string(),
+                            Some(false) => crate::tr!("Aucune panne prévue", "No failure predicted").to_string(),
+                            None => none(),
+                        },
+                        h.predict_failure.filter(|&p| p).map(|_| DANGER),
+                    ),
+                    (crate::tr!("Firmware", "Firmware"), if h.firmware.is_empty() { none() } else { h.firmware.clone() }, None),
+                    (crate::tr!("Numéro de série", "Serial number"), if h.serial.is_empty() { none() } else { h.serial.clone() }, None),
+                ];
+                egui::Grid::new(("health", d.number)).num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
+                    for (k, v, c) in rows {
+                        ui.label(RichText::new(k).color(MUTED));
+                        ui.label(RichText::new(v).color(c.unwrap_or(TEXT)));
+                        ui.end_row();
+                    }
+                });
+                if !h.has_counters() {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(crate::tr!("Ce disque ne transmet pas ses compteurs SMART (fréquent pour les disques USB).", "This disk does not report its SMART counters (common for USB disks).")).color(MUTED).size(12.0));
+                }
+            });
+        }
     }
 
     fn page_settings(&mut self, ui: &mut egui::Ui) {
