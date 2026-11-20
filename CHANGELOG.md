@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Theme choice in **Settings**: follow Windows, light or dark, in the same style as the language choice. Dark stays the default; every page has a light palette.
 
 ### Changed
+- The actions of the right panel (Resize / move, Format, Delete...) are highlighted in grey under the mouse, like the main menu, and show a hand cursor.
 - Changes are developed on their own branches and gathered on `dev`; a version, with all its
   changes, is released by merging `dev` into `main`. Pull requests are checked for a changelog
   entry, and releases for a version bump.

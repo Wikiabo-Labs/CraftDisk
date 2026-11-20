@@ -491,9 +491,18 @@ fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> bool {
     ui.add_enabled(enabled, egui::Button::new(RichText::new(text).color(Color32::WHITE).strong()).fill(ACCENT).rounding(6.0)).clicked()
 }
 
+/// One line of the action list (right panel): grey highlight under the mouse, like the menu.
 fn action(ui: &mut egui::Ui, icon: &str, text: &str, enabled: bool) -> bool {
     let w = ui.available_width();
-    ui.add_enabled(enabled, egui::Button::new(RichText::new(format!("{icon}  {text}")).size(14.0)).min_size(Vec2::new(w, 32.0)).fill(Color32::TRANSPARENT).stroke(Stroke::NONE).rounding(6.0)).clicked()
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 32.0), if enabled { Sense::click() } else { Sense::hover() });
+    if enabled && resp.hovered() {
+        let fill = pick(Color32::from_rgb(0x38, 0x3a, 0x42), Color32::from_rgb(0xe8, 0xeb, 0xf0));
+        ui.painter().rect_filled(rect, 6.0, if resp.is_pointer_button_down_on() { fill.gamma_multiply(1.15) } else { fill });
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let color = if enabled { TEXT() } else { MUTED().gamma_multiply(0.6) };
+    ui.painter().text(rect.left_center() + Vec2::new(10.0, 0.0), Align2::LEFT_CENTER, format!("{icon}  {text}"), FontId::proportional(14.0), color);
+    enabled && resp.clicked()
 }
 
 fn heading(ui: &mut egui::Ui, title: &str, sub: &str) {
