@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - `CHANGELOG.md` and `CONTRIBUTING.md`.
+- **Disk health** page, right under Home: an overall verdict per disk (Good / Needs attention / Failing), Windows' health status, temperature, SSD wear and life left, power-on hours, read and write errors, firmware and serial number. Values are read automatically when DiskCraft starts, together with the disk scan, and again on Refresh.
 
 ### Changed
 - Releases are published automatically from `main` only. Each release carries the patch notes of its version from this changelog, and every past version stays available on the Releases page.
