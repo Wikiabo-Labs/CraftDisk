@@ -14,6 +14,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Theme choice in **Settings**: follow Windows, light or dark, in the same style as the language choice. Dark stays the default; every page has a light palette.
 
 ### Changed
+- Changes are developed on their own branches and gathered on `dev`; a version, with all its
+  changes, is released by merging `dev` into `main`. Pull requests are checked for a changelog
+  entry, and releases for a version bump.
 - Releases are published automatically from `main` only. Each release carries the patch notes of its version from this changelog, and every past version stays available on the Releases page.
 - Merging copies the files to the root of the first partition. A file whose name is already used there gets the date and time added to its name: `test.txt` becomes `test-11-23-25-20-11-2026.txt` (`HH-mm-ss-dd-MM-yyyy`).
 - The second partition is deleted only after every one of its files is found on the first partition with the same size; otherwise the merge stops and nothing is deleted.
