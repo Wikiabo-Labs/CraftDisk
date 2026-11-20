@@ -289,8 +289,36 @@ pub fn load_health() -> Result<std::collections::HashMap<u32, Health>, String> {
                     start_stop_cycles: r.start_stop,
                     load_unload_cycles: r.load_unload,
                     predict_failure: r.predict_failure,
+                    ..Default::default()
                 },
             )
+        })
+        .map(|(n, mut h)| {
+            // Windows' counters are often empty (NVMe especially): ask the drive itself.
+            if let Some(s) = crate::smart::read(n) {
+                h.temperature = h.temperature.or(s.temperature);
+                h.wear = h.wear.or(s.wear);
+                h.power_on_hours = h.power_on_hours.or(s.power_on_hours);
+                h.start_stop_cycles = h.start_stop_cycles.or(s.start_stop);
+                h.load_unload_cycles = h.load_unload_cycles.or(s.load_unload);
+                h.available_spare = s.available_spare;
+                h.available_spare_threshold = s.available_spare_threshold;
+                h.critical_warning = s.critical_warning;
+                h.power_cycles = s.power_cycles;
+                h.unsafe_shutdowns = s.unsafe_shutdowns;
+                h.media_errors = s.media_errors;
+                h.error_log_entries = s.error_log_entries;
+                h.data_read = s.data_read;
+                h.data_written = s.data_written;
+                h.reallocated = s.reallocated;
+                h.pending = s.pending;
+                h.uncorrectable = s.uncorrectable;
+                h.crc_errors = s.crc_errors;
+                if h.predict_failure.is_none() {
+                    h.predict_failure = s.critical_warning.map(|c| c != 0).or(s.threshold_exceeded);
+                }
+            }
+            (n, h)
         })
         .collect())
 }
@@ -298,8 +326,8 @@ pub fn load_health() -> Result<std::collections::HashMap<u32, Health>, String> {
 /// Example health values for the demo disks.
 pub fn demo_health() -> std::collections::HashMap<u32, Health> {
     let mut m = std::collections::HashMap::new();
-    m.insert(0, Health { status: "Healthy".into(), operational: "OK".into(), media: "SSD".into(), bus: "NVMe".into(), firmware: "5B2QGXA7".into(), serial: "S0000000000001".into(), temperature: Some(41), temperature_max: Some(68), wear: Some(3), power_on_hours: Some(4210), read_errors: Some(0), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: None, load_unload_cycles: None, predict_failure: None });
-    m.insert(1, Health { status: "Warning".into(), operational: "OK".into(), media: "HDD".into(), bus: "SATA".into(), firmware: "CC43".into(), serial: "WD-0000000002".into(), temperature: Some(46), temperature_max: Some(55), wear: None, power_on_hours: Some(38950), read_errors: Some(12), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: Some(2810), load_unload_cycles: Some(91500), predict_failure: Some(false) });
+    m.insert(0, Health { status: "Healthy".into(), operational: "OK".into(), media: "SSD".into(), bus: "NVMe".into(), firmware: "5B2QGXA7".into(), serial: "S0000000000001".into(), temperature: Some(41), temperature_max: Some(68), wear: Some(3), power_on_hours: Some(4210), read_errors: Some(0), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: None, load_unload_cycles: None, predict_failure: Some(false), available_spare: Some(100), available_spare_threshold: Some(10), critical_warning: Some(0), power_cycles: Some(1312), unsafe_shutdowns: Some(41), media_errors: Some(0), error_log_entries: Some(0), data_read: Some(28 * 1_000_000_000_000), data_written: Some(19 * 1_000_000_000_000), ..Default::default() });
+    m.insert(1, Health { status: "Warning".into(), operational: "OK".into(), media: "HDD".into(), bus: "SATA".into(), firmware: "CC43".into(), serial: "WD-0000000002".into(), temperature: Some(46), temperature_max: Some(55), wear: None, power_on_hours: Some(38950), read_errors: Some(12), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: Some(2810), load_unload_cycles: Some(91500), predict_failure: Some(false), power_cycles: Some(2790), reallocated: Some(8), pending: Some(0), uncorrectable: Some(0), crc_errors: Some(0), ..Default::default() });
     m.insert(2, Health { status: "Healthy".into(), operational: "OK".into(), media: "Unspecified".into(), bus: "USB".into(), ..Default::default() });
     m
 }

@@ -39,6 +39,26 @@ fn ioctl(f: &File, code: u32, out: &mut [u8]) -> std::io::Result<u32> {
         Ok(ret)
     }
 }
+/// DeviceIoControl where the first `in_len` bytes of `buf` are the input and the whole of `buf`
+/// receives the output (the usual layout of storage queries).
+#[cfg(windows)]
+pub fn ioctl_inout(f: &File, code: u32, buf: &mut [u8], in_len: usize) -> std::io::Result<u32> {
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    let mut ret: u32 = 0;
+    let in_len = in_len.min(buf.len());
+    // SAFETY: input and output point into the same live buffer, with lengths inside it.
+    let ok = unsafe { DeviceIoControl(f.as_raw_handle() as _, code, buf.as_ptr() as _, in_len as u32, buf.as_mut_ptr() as _, buf.len() as u32, &mut ret, std::ptr::null_mut()) };
+    if ok == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(ret)
+    }
+}
+#[cfg(not(windows))]
+pub fn ioctl_inout(_f: &File, _code: u32, _buf: &mut [u8], _in_len: usize) -> std::io::Result<u32> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Windows only"))
+}
+
 #[cfg(not(windows))]
 fn ioctl(_f: &File, _code: u32, _out: &mut [u8]) -> std::io::Result<u32> {
     Err(std::io::Error::new(std::io::ErrorKind::Unsupported, crate::tr!("Windows seulement", "Windows only")))
