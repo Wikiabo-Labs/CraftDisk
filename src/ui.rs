@@ -1073,7 +1073,7 @@ impl App {
                     ui.label(RichText::new(crate::tr!("Espace non alloué", "Unallocated space")).size(17.0).strong());
                     ui.label(RichText::new(crate::trf!("Disque {n} · {}", "Disk {n} · {}", fmt_size(s))).color(MUTED()));
                     ui.add_space(8.0);
-                    if action(ui, "＋", crate::tr!("Créer une partition", "Create a partition"), true) {
+                    if action(ui, "➕", crate::tr!("Créer une partition", "Create a partition"), true) {
                         let letter = self.free_letters().first().copied();
                         acts.push(Act::Open(Dlg::Create { disk: n, offset: o, max: s, size_mb: (s / MIB) as f64, fs: Fs::Ntfs, label: String::new(), letter }));
                     }

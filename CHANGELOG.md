@@ -24,6 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Disk health lists only the values the drive reports, instead of showing "—" for the others.
 
 ### Fixed
+- The "Create a partition" action showed an empty square instead of its icon (the character was missing from the interface fonts).
 - Merging two partitions no longer seems to lose the files of the second one. They used to be copied into a "Contents of X" folder that robocopy marked hidden and system, so File Explorer did not show it.
 - Disk health showed "—" for most values on NVMe drives, because Windows' reliability counters leave them empty. DiskCraft now reads the drive's own SMART data: the NVMe health log (power-on hours, power cycles, unsafe shutdowns, media errors, error log entries, available spare, data read and written, critical warning) and, for SATA drives, the SMART attributes (reallocated, pending and uncorrectable sectors, cable CRC errors, start/stop and head load cycles, threshold check).
 
