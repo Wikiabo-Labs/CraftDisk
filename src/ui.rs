@@ -9,17 +9,76 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 
 // Colours.
-const NAV: Color32 = Color32::from_rgb(0x1a, 0x1b, 0x1f);
-const NAV_HI: Color32 = Color32::from_rgb(0x2b, 0x2d, 0x33);
+/// Light or dark palette, chosen each frame from the theme egui resolved
+/// (Settings: light, dark or follow Windows).
+static LIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn pick(dark: Color32, light: Color32) -> Color32 {
+    if LIGHT.load(std::sync::atomic::Ordering::Relaxed) {
+        light
+    } else {
+        dark
+    }
+}
+#[allow(non_snake_case)]
+fn NAV() -> Color32 {
+    pick(Color32::from_rgb(0x1a, 0x1b, 0x1f), Color32::from_rgb(0xee, 0xf0, 0xf4))
+}
+#[allow(non_snake_case)]
+fn NAV_HI() -> Color32 {
+    pick(Color32::from_rgb(0x2b, 0x2d, 0x33), Color32::from_rgb(0xdf, 0xe3, 0xea))
+}
 const ACCENT: Color32 = Color32::from_rgb(0x4a, 0x7d, 0xf7);
-const ACCENT_DARK: Color32 = Color32::from_rgb(0x8f, 0xb0, 0xff);
+#[allow(non_snake_case)]
+fn ACCENT_DARK() -> Color32 {
+    pick(Color32::from_rgb(0x8f, 0xb0, 0xff), Color32::from_rgb(0x2f, 0x5f, 0xd0))
+}
 const BRAND: Color32 = Color32::from_rgb(0x22, 0xa0, 0x78);
-const BG: Color32 = Color32::from_rgb(0x20, 0x21, 0x25);
-const CARD: Color32 = Color32::from_rgb(0x28, 0x29, 0x2e);
-const CARD_HI: Color32 = Color32::from_rgb(0x31, 0x33, 0x39);
-const LINE: Color32 = Color32::from_rgb(0x38, 0x3a, 0x41);
-const TEXT: Color32 = Color32::from_rgb(0xe8, 0xea, 0xee);
-const MUTED: Color32 = Color32::from_rgb(0x9b, 0xa1, 0xab);
+#[allow(non_snake_case)]
+fn BG() -> Color32 {
+    pick(Color32::from_rgb(0x20, 0x21, 0x25), Color32::from_rgb(0xf6, 0xf7, 0xf9))
+}
+#[allow(non_snake_case)]
+fn CARD() -> Color32 {
+    pick(Color32::from_rgb(0x28, 0x29, 0x2e), Color32::from_rgb(0xff, 0xff, 0xff))
+}
+#[allow(non_snake_case)]
+fn CARD_HI() -> Color32 {
+    pick(Color32::from_rgb(0x31, 0x33, 0x39), Color32::from_rgb(0xee, 0xf0, 0xf3))
+}
+#[allow(non_snake_case)]
+fn LINE() -> Color32 {
+    pick(Color32::from_rgb(0x38, 0x3a, 0x41), Color32::from_rgb(0xdc, 0xdf, 0xe5))
+}
+#[allow(non_snake_case)]
+fn TEXT() -> Color32 {
+    pick(Color32::from_rgb(0xe8, 0xea, 0xee), Color32::from_rgb(0x1d, 0x20, 0x27))
+}
+#[allow(non_snake_case)]
+fn MUTED() -> Color32 {
+    pick(Color32::from_rgb(0x9b, 0xa1, 0xab), Color32::from_rgb(0x5d, 0x64, 0x70))
+}
+
+#[allow(non_snake_case)]
+fn NAV_TEXT() -> Color32 {
+    pick(Color32::from_gray(200), Color32::from_rgb(0x3a, 0x40, 0x4a))
+}
+/// Empty bar background and hatching of unallocated space.
+#[allow(non_snake_case)]
+fn TRACK() -> Color32 {
+    pick(Color32::from_rgb(0x2c, 0x2e, 0x34), Color32::from_rgb(0xe6, 0xe9, 0xee))
+}
+#[allow(non_snake_case)]
+fn HATCH() -> Color32 {
+    pick(Color32::from_rgb(0x42, 0x45, 0x4d), Color32::from_rgb(0xc9, 0xce, 0xd6))
+}
+#[allow(non_snake_case)]
+fn INFO_BG() -> Color32 {
+    pick(Color32::from_rgb(0x22, 0x30, 0x4a), Color32::from_rgb(0xe4, 0xec, 0xfd))
+}
+#[allow(non_snake_case)]
+fn PENDING_BG() -> Color32 {
+    pick(Color32::from_rgb(0x33, 0x2b, 0x20), Color32::from_rgb(0xfd, 0xf0, 0xdc))
+}
 const PENDING: Color32 = Color32::from_rgb(0xf0, 0xa0, 0x3c);
 const DANGER: Color32 = Color32::from_rgb(0xf0, 0x6a, 0x6a);
 const ICON_BLUE: Color32 = Color32::from_rgb(0x6c, 0x9b, 0xff);
@@ -145,35 +204,35 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<String>, demo: bool) -> App {
-        let mut style = (*cc.egui_ctx.style()).clone();
-        style.visuals = egui::Visuals::dark();
-        style.visuals.extreme_bg_color = Color32::from_rgb(0x1b, 0x1c, 0x20);
-        style.visuals.faint_bg_color = Color32::from_rgb(0x2c, 0x2e, 0x34);
-        style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, LINE);
-        style.visuals.widgets.inactive.weak_bg_fill = CARD_HI;
-        style.visuals.widgets.inactive.bg_fill = CARD_HI;
-        style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(0x3a, 0x3d, 0x45);
-        style.visuals.widgets.active.weak_bg_fill = Color32::from_rgb(0x44, 0x48, 0x52);
-        style.visuals.window_stroke = Stroke::new(1.0_f32, LINE);
-        style.visuals.hyperlink_color = ACCENT_DARK;
-        style.visuals.panel_fill = BG;
-        style.visuals.window_fill = CARD;
-        style.visuals.override_text_color = Some(TEXT);
-        style.visuals.selection.bg_fill = ACCENT.gamma_multiply(0.6);
-        style.visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT_DARK);
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
-        style.visuals.window_rounding = Rounding::same(10.0);
-        style.spacing.item_spacing = Vec2::new(8.0, 7.0);
-        style.spacing.button_padding = Vec2::new(10.0, 5.0);
-        // Always the dark DiskCraft look, whatever Windows' light/dark setting is
-        // (on a PC in light mode the window used to switch to the light style: grey text on dark panels).
-        cc.egui_ctx.set_theme(egui::Theme::Dark);
-        cc.egui_ctx.set_style_of(egui::Theme::Dark, style.clone());
-        cc.egui_ctx.set_style_of(egui::Theme::Light, style);
-        if std::env::var("DISKCRAFT_TEST_LIGHT").is_ok() {
-            // Check only: behave as on a PC set to light mode; the look must not change.
-            cc.egui_ctx.set_theme(egui::Theme::Light);
+        // One DiskCraft style per theme; egui picks the one matching the Settings choice
+        // (light, dark or follow Windows) and the palette functions follow it.
+        for theme in [egui::Theme::Dark, egui::Theme::Light] {
+            LIGHT.store(theme == egui::Theme::Light, std::sync::atomic::Ordering::Relaxed);
+            let light = theme == egui::Theme::Light;
+            let mut style = (*cc.egui_ctx.style_of(theme)).clone();
+            style.visuals = if light { egui::Visuals::light() } else { egui::Visuals::dark() };
+            style.visuals.extreme_bg_color = pick(Color32::from_rgb(0x1b, 0x1c, 0x20), Color32::from_rgb(0xfb, 0xfc, 0xfd));
+            style.visuals.faint_bg_color = TRACK();
+            style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, LINE());
+            style.visuals.widgets.inactive.weak_bg_fill = CARD_HI();
+            style.visuals.widgets.inactive.bg_fill = CARD_HI();
+            style.visuals.widgets.hovered.weak_bg_fill = pick(Color32::from_rgb(0x3a, 0x3d, 0x45), Color32::from_rgb(0xe2, 0xe6, 0xec));
+            style.visuals.widgets.active.weak_bg_fill = pick(Color32::from_rgb(0x44, 0x48, 0x52), Color32::from_rgb(0xd5, 0xda, 0xe2));
+            style.visuals.window_stroke = Stroke::new(1.0_f32, LINE());
+            style.visuals.hyperlink_color = ACCENT_DARK();
+            style.visuals.panel_fill = BG();
+            style.visuals.window_fill = CARD();
+            style.visuals.override_text_color = Some(TEXT());
+            style.visuals.selection.bg_fill = ACCENT.gamma_multiply(0.6);
+            style.visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT_DARK());
+            style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
+            style.visuals.window_rounding = Rounding::same(10.0);
+            style.spacing.item_spacing = Vec2::new(8.0, 7.0);
+            style.spacing.button_padding = Vec2::new(10.0, 5.0);
+            cc.egui_ctx.set_style_of(theme, style);
         }
+        cc.egui_ctx.set_theme(theme_pref::load().egui());
+        LIGHT.store(cc.egui_ctx.theme() == egui::Theme::Light, std::sync::atomic::Ordering::Relaxed);
         let logo_tex = cc.egui_ctx.load_texture("logo", crate::logo::image(128), egui::TextureOptions::LINEAR);
 
         let docs = std::env::var("USERPROFILE").map(|p| format!(r"{p}\Documents\DiskCraft-WinPE.iso")).unwrap_or_else(|_| r"C:\DiskCraft-WinPE.iso".into());
@@ -417,9 +476,9 @@ impl App {
 
 fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Frame::none()
-        .fill(CARD)
+        .fill(CARD())
         .rounding(10.0)
-        .stroke(Stroke::new(1.0_f32, LINE))
+        .stroke(Stroke::new(1.0_f32, LINE()))
         .inner_margin(14.0)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -440,7 +499,7 @@ fn action(ui: &mut egui::Ui, icon: &str, text: &str, enabled: bool) -> bool {
 fn heading(ui: &mut egui::Ui, title: &str, sub: &str) {
     ui.label(RichText::new(title).size(22.0).strong());
     if !sub.is_empty() {
-        ui.label(RichText::new(sub).color(MUTED));
+        ui.label(RichText::new(sub).color(MUTED()));
     }
     ui.add_space(6.0);
 }
@@ -478,6 +537,7 @@ fn letter_combo(ui: &mut egui::Ui, id: &str, value: &mut Option<char>, choices: 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let now = ctx.input(|i| i.time);
+        LIGHT.store(ctx.theme() == egui::Theme::Light, std::sync::atomic::Ordering::Relaxed);
         if self.started == 0.0 {
             self.started = now.max(0.001);
         }
@@ -518,7 +578,7 @@ impl eframe::App for App {
         if self.page == Page::Partitions {
             self.side(ctx, &mut acts);
         }
-        egui::CentralPanel::default().frame(egui::Frame::none().fill(BG).inner_margin(18.0)).show(ctx, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::none().fill(BG()).inner_margin(18.0)).show(ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.page {
                 Page::Home => self.page_home(ui, &mut acts),
                 Page::Health => self.page_health(ui),
@@ -601,13 +661,13 @@ impl eframe::App for App {
 
 impl App {
     fn nav(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        egui::SidePanel::left("nav").exact_width(236.0).resizable(false).frame(egui::Frame::none().fill(NAV).stroke(Stroke::new(1.0_f32, LINE)).inner_margin(egui::Margin::symmetric(12.0, 14.0))).show(ctx, |ui| {
+        egui::SidePanel::left("nav").exact_width(236.0).resizable(false).frame(egui::Frame::none().fill(NAV()).stroke(Stroke::new(1.0_f32, LINE())).inner_margin(egui::Margin::symmetric(12.0, 14.0))).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::new(38.0, 38.0)).rounding(8.0));
                 ui.vertical(|ui| {
                     ui.add_space(1.0);
-                    ui.label(RichText::new("DiskCraft").size(19.0).strong().color(TEXT));
-                    ui.label(RichText::new(crate::trf!("v{} · libre et gratuit", "v{} · free and open source", env!("CARGO_PKG_VERSION"))).size(11.0).color(MUTED));
+                    ui.label(RichText::new("DiskCraft").size(19.0).strong().color(TEXT()));
+                    ui.label(RichText::new(crate::trf!("v{} · libre et gratuit", "v{} · free and open source", env!("CARGO_PKG_VERSION"))).size(11.0).color(MUTED()));
                 });
             });
             ui.add_space(14.0);
@@ -622,19 +682,19 @@ impl App {
                 (Page::Convert, "⟲", crate::tr!("Convertisseurs", "Converters"), ICON_ORANGE),
                 (Page::WinPe, "💿", crate::tr!("Disque de démarrage", "Boot disk"), ICON_TEAL),
                 (Page::Support, "❓", crate::tr!("Aide & support", "Help & support"), ICON_RED),
-                (Page::Settings, "⚙", crate::tr!("Paramètres", "Settings"), MUTED),
-                (Page::About, "ℹ", crate::tr!("À propos", "About"), MUTED),
+                (Page::Settings, "⚙", crate::tr!("Paramètres", "Settings"), MUTED()),
+                (Page::About, "ℹ", crate::tr!("À propos", "About"), MUTED()),
             ];
             for (page, icon, name, color) in items {
                 let sel = self.page == page;
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 38.0), Sense::click());
                 if sel || resp.hovered() {
-                    ui.painter().rect_filled(rect, 7.0, if sel { NAV_HI } else { NAV_HI.gamma_multiply(0.6) });
+                    ui.painter().rect_filled(rect, 7.0, if sel { NAV_HI() } else { NAV_HI().gamma_multiply(0.6) });
                 }
                 if sel {
                     ui.painter().rect_filled(egui::Rect::from_min_size(rect.min + Vec2::new(0.0, 9.0), Vec2::new(3.0, 20.0)), 2.0, ACCENT);
                 }
-                let col = if sel { TEXT } else { Color32::from_gray(200) };
+                let col = if sel { TEXT() } else { NAV_TEXT() };
                 ui.painter().text(rect.left_center() + Vec2::new(14.0, 0.0), Align2::LEFT_CENTER, icon, FontId::proportional(16.0), color);
                 ui.painter().text(rect.left_center() + Vec2::new(42.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(14.0), col);
                 if resp.clicked() {
@@ -642,13 +702,13 @@ impl App {
                 }
             }
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                ui.label(RichText::new(tr!("Logiciel libre (GPL-3.0) · support gratuit", "Free software (GPL-3.0) · free support")).size(11.0).color(MUTED));
+                ui.label(RichText::new(tr!("Logiciel libre (GPL-3.0) · support gratuit", "Free software (GPL-3.0) · free support")).size(11.0).color(MUTED()));
             });
         });
     }
 
     fn top(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        egui::TopBottomPanel::top("top").exact_height(54.0).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0_f32, LINE)).inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
+        egui::TopBottomPanel::top("top").exact_height(54.0).frame(egui::Frame::none().fill(CARD()).stroke(Stroke::new(1.0_f32, LINE())).inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
                 let title = match self.page {
                     Page::Home => crate::tr!("Accueil", "Home"),
@@ -665,7 +725,7 @@ impl App {
                 ui.label(RichText::new(title).size(17.0).strong());
                 if self.loading.is_some() {
                     ui.add(egui::Spinner::new());
-                    ui.label(RichText::new(crate::tr!("Lecture des disques...", "Reading disks...")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Lecture des disques...", "Reading disks...")).color(MUTED()));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let n = self.ops.len();
@@ -686,11 +746,11 @@ impl App {
     fn queue_panel(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
         egui::TopBottomPanel::bottom("queue")
             .resizable(false)
-            .frame(egui::Frame::none().fill(Color32::from_rgb(0x33, 0x2b, 0x20)).stroke(Stroke::new(1.0_f32, PENDING.gamma_multiply(0.5))).inner_margin(egui::Margin::symmetric(18.0, 10.0)))
+            .frame(egui::Frame::none().fill(PENDING_BG()).stroke(Stroke::new(1.0_f32, PENDING.gamma_multiply(0.5))).inner_margin(egui::Margin::symmetric(18.0, 10.0)))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(crate::trf!("Opérations en attente ({})", "Pending operations ({})", self.ops.len())).strong().color(PENDING));
-                    ui.label(RichText::new(crate::tr!("Rien n'est modifié tant que vous n'avez pas cliqué sur « Exécuter ». Vous pouvez annuler à tout moment.", "Nothing is changed until you click \"Execute\". You can undo at any time.")).color(MUTED).size(12.0));
+                    ui.label(RichText::new(crate::tr!("Rien n'est modifié tant que vous n'avez pas cliqué sur « Exécuter ». Vous pouvez annuler à tout moment.", "Nothing is changed until you click \"Execute\". You can undo at any time.")).color(MUTED()).size(12.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(crate::tr!("Tout annuler", "Undo all")).clicked() {
                             acts.push(Act::UndoAll);
@@ -707,9 +767,9 @@ impl App {
 
     fn page_partitions(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
         if let Some(n) = &self.load_note {
-            egui::Frame::none().fill(Color32::from_rgb(0x22, 0x30, 0x4a)).rounding(8.0).inner_margin(10.0).show(ui, |ui| {
+            egui::Frame::none().fill(INFO_BG()).rounding(8.0).inner_margin(10.0).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new(n).color(ACCENT_DARK));
+                ui.label(RichText::new(n).color(ACCENT_DARK()));
             });
             ui.add_space(8.0);
         }
@@ -720,12 +780,12 @@ impl App {
                 let resp = ui
                     .horizontal(|ui| {
                         let (r, _) = ui.allocate_exact_size(Vec2::new(36.0, 36.0), Sense::hover());
-                        ui.painter().rect_filled(r, 7.0, if header_sel { ACCENT } else { CARD_HI });
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, "🖴", FontId::proportional(18.0), if header_sel { Color32::WHITE } else { MUTED });
+                        ui.painter().rect_filled(r, 7.0, if header_sel { ACCENT } else { CARD_HI() });
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, "🖴", FontId::proportional(18.0), if header_sel { Color32::WHITE } else { MUTED() });
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).size(15.5).strong());
-                                ui.label(RichText::new(&d.model).color(MUTED));
+                                ui.label(RichText::new(&d.model).color(MUTED()));
                                 if d.is_system || d.is_boot {
                                     badge(ui, "Windows", ACCENT);
                                 }
@@ -737,7 +797,7 @@ impl App {
                                 }
                             });
                             let bus = if d.bus.is_empty() { "—".to_string() } else { d.bus.clone() };
-                            ui.label(RichText::new(format!("{} · {} · {}", fmt_size(d.size), d.type_name(), bus)).size(12.0).color(MUTED));
+                            ui.label(RichText::new(format!("{} · {} · {}", fmt_size(d.size), d.type_name(), bus)).size(12.0).color(MUTED()));
                         });
                     })
                     .response
@@ -763,9 +823,9 @@ impl App {
         let h = 58.0;
         let (rect, _) = ui.allocate_exact_size(Vec2::new(width, h), Sense::hover());
         if segs.is_empty() {
-            ui.painter().rect_filled(rect, 6.0, CARD_HI);
+            ui.painter().rect_filled(rect, 6.0, CARD_HI());
             let msg = if d.size == 0 { crate::tr!("Aucun support inséré", "No media inserted") } else { crate::tr!("Disque non initialisé : sélectionnez le disque puis « Initialiser en GPT » ou « en MBR »", "Uninitialized disk: select the disk, then \"Initialize as GPT\" or \"as MBR\"") };
-            ui.painter().text(rect.center(), Align2::CENTER_CENTER, msg, FontId::proportional(13.0), MUTED);
+            ui.painter().text(rect.center(), Align2::CENTER_CENTER, msg, FontId::proportional(13.0), MUTED());
             return;
         }
         let sizes: Vec<u64> = segs
@@ -813,14 +873,14 @@ impl App {
             if matches!(s, Segment::Free { .. }) {
                 let mut xx = r.left() - h;
                 while xx < r.right() {
-                    p.line_segment([egui::pos2(xx, r.bottom()), egui::pos2(xx + h, r.top() + 5.0)], Stroke::new(1.0_f32, Color32::from_rgb(0x44, 0x47, 0x4f)));
+                    p.line_segment([egui::pos2(xx, r.bottom()), egui::pos2(xx + h, r.top() + 5.0)], Stroke::new(1.0_f32, HATCH()));
                     xx += 9.0;
                 }
             }
-            p.text(r.left_top() + Vec2::new(7.0, 13.0), Align2::LEFT_TOP, &label, FontId::proportional(13.0), TEXT);
-            p.text(r.left_top() + Vec2::new(7.0, 32.0), Align2::LEFT_TOP, &sub, FontId::proportional(11.5), MUTED);
+            p.text(r.left_top() + Vec2::new(7.0, 13.0), Align2::LEFT_TOP, &label, FontId::proportional(13.0), TEXT());
+            p.text(r.left_top() + Vec2::new(7.0, 32.0), Align2::LEFT_TOP, &sub, FontId::proportional(11.5), MUTED());
             let stroke = if sel {
-                Stroke::new(2.5_f32, ACCENT_DARK)
+                Stroke::new(2.5_f32, ACCENT_DARK())
             } else if pending {
                 Stroke::new(2.0_f32, PENDING)
             } else if resp.hovered() {
@@ -851,7 +911,7 @@ impl App {
         }
         egui::Grid::new(("grid", d.number)).num_columns(7).spacing([18.0, 4.0]).striped(true).min_col_width(60.0).show(ui, |ui| {
             for h in ["Partition", crate::tr!("Système de fichiers", "File system"), crate::tr!("Taille", "Size"), crate::tr!("Utilisé", "Used"), crate::tr!("Libre", "Free"), crate::tr!("Type", "Type"), crate::tr!("État", "Status")] {
-                ui.label(RichText::new(h).size(12.0).color(MUTED).strong());
+                ui.label(RichText::new(h).size(12.0).color(MUTED()).strong());
             }
             ui.end_row();
             for s in d.segments() {
@@ -903,11 +963,11 @@ impl App {
     }
 
     fn side(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        egui::SidePanel::right("side").exact_width(270.0).resizable(false).frame(egui::Frame::none().fill(CARD).stroke(Stroke::new(1.0_f32, LINE)).inner_margin(14.0)).show(ctx, |ui| {
+        egui::SidePanel::right("side").exact_width(270.0).resizable(false).frame(egui::Frame::none().fill(CARD()).stroke(Stroke::new(1.0_f32, LINE())).inner_margin(14.0)).show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| match self.sel {
                 Sel::None => {
                     ui.label(RichText::new(crate::tr!("Sélectionnez une partition", "Select a partition")).size(15.0).strong());
-                    ui.label(RichText::new(crate::tr!("Cliquez sur une partition, un espace non alloué ou le titre d'un disque pour voir ce que vous pouvez faire.", "Click a partition, some unallocated space or a disk's title to see what you can do.")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Cliquez sur une partition, un espace non alloué ou le titre d'un disque pour voir ce que vous pouvez faire.", "Click a partition, some unallocated space or a disk's title to see what you can do.")).color(MUTED()));
                     ui.add_space(10.0);
                     let d = self.preview.len();
                     let p = self.all_parts().len();
@@ -934,7 +994,7 @@ impl App {
                     let Some(i) = d.part_at(o) else { return };
                     let p = d.parts[i].clone();
                     ui.label(RichText::new(p.title()).size(17.0).strong());
-                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", n, p.fs.name(), fmt_size(p.size))).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", n, p.fs.name(), fmt_size(p.size))).color(MUTED()));
                     if let Some(u) = p.used {
                         ui.add(egui::ProgressBar::new(u as f32 / p.size.max(1) as f32).text(crate::trf!("{} utilisés sur {}", "{} used of {}", fmt_size(u), fmt_size(p.size))));
                     }
@@ -1006,12 +1066,12 @@ impl App {
                     }
                     if prot {
                         ui.add_space(6.0);
-                        ui.label(RichText::new(crate::tr!("Windows utilise cette partition : la supprimer, la formater ou l'effacer est bloqué.", "Windows is using this partition: deleting, formatting or wiping it is blocked.")).size(12.0).color(MUTED));
+                        ui.label(RichText::new(crate::tr!("Windows utilise cette partition : la supprimer, la formater ou l'effacer est bloqué.", "Windows is using this partition: deleting, formatting or wiping it is blocked.")).size(12.0).color(MUTED()));
                     }
                 }
                 Sel::Free(n, o, s) => {
                     ui.label(RichText::new(crate::tr!("Espace non alloué", "Unallocated space")).size(17.0).strong());
-                    ui.label(RichText::new(crate::trf!("Disque {n} · {}", "Disk {n} · {}", fmt_size(s))).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("Disque {n} · {}", "Disk {n} · {}", fmt_size(s))).color(MUTED()));
                     ui.add_space(8.0);
                     if action(ui, "＋", crate::tr!("Créer une partition", "Create a partition"), true) {
                         let letter = self.free_letters().first().copied();
@@ -1022,12 +1082,12 @@ impl App {
                         self.clone_pdst = Some((n, o));
                         acts.push(Act::Page(Page::Clone));
                     }
-                    ui.label(RichText::new(crate::tr!("Pour agrandir la partition placée juste avant, sélectionnez-la puis « Redimensionner ».", "To extend the partition just before it, select that partition, then \"Resize\".")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Pour agrandir la partition placée juste avant, sélectionnez-la puis « Redimensionner ».", "To extend the partition just before it, select that partition, then \"Resize\".")).size(12.0).color(MUTED()));
                 }
                 Sel::Disk(n) => {
                     let Some(d) = self.disk(n).cloned() else { return };
                     ui.label(RichText::new(crate::trf!("Disque {n}", "Disk {n}")).size(17.0).strong());
-                    ui.label(RichText::new(format!("{} · {} · {}", d.model, fmt_size(d.size), d.type_name())).color(MUTED));
+                    ui.label(RichText::new(format!("{} · {} · {}", d.model, fmt_size(d.size), d.type_name())).color(MUTED()));
                     ui.add_space(8.0);
                     let sys = d.is_system || d.is_boot;
                     if action(ui, "🗐", crate::tr!("Cloner le disque", "Clone disk"), true) {
@@ -1065,14 +1125,14 @@ impl App {
             ui.vertical(|ui| {
                 ui.add_space(6.0);
                 ui.label(RichText::new(crate::tr!("Bienvenue dans DiskCraft", "Welcome to DiskCraft")).size(27.0).strong());
-                ui.label(RichText::new(crate::tr!("Un gestionnaire de disques open source — local, gratuit et complet.", "An open-source disk manager — local, free and complete.")).size(14.5).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Un gestionnaire de disques open source — local, gratuit et complet.", "An open-source disk manager — local, free and complete.")).size(14.5).color(MUTED()));
             });
         });
         ui.add_space(14.0);
         if let Some(n) = &self.load_note {
-            egui::Frame::none().fill(Color32::from_rgb(0x22, 0x30, 0x4a)).rounding(8.0).inner_margin(10.0).show(ui, |ui| {
+            egui::Frame::none().fill(INFO_BG()).rounding(8.0).inner_margin(10.0).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new(n).color(ACCENT_DARK));
+                ui.label(RichText::new(n).color(ACCENT_DARK()));
             });
             ui.add_space(10.0);
         }
@@ -1081,7 +1141,7 @@ impl App {
                 ui.label(RichText::new("👥").size(20.0).color(ICON_BLUE));
                 ui.vertical(|ui| {
                     ui.label(RichText::new(crate::tr!("Rejoindre la communauté DiskCraft", "Join the DiskCraft community")).size(15.0).strong());
-                    ui.label(RichText::new(crate::tr!("Obtenez de l'aide gratuitement, proposez des idées et suivez le développement.", "Get free help, suggest ideas and follow development.")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Obtenez de l'aide gratuitement, proposez des idées et suivez le développement.", "Get free help, suggest ideas and follow development.")).color(MUTED()));
                 });
             });
             ui.add_space(6.0);
@@ -1116,9 +1176,9 @@ impl App {
             egui::Grid::new("tools").num_columns(3).spacing([10.0, 10.0]).show(ui, |ui| {
                 for (k, (icon, color, title, sub, page)) in tools.iter().enumerate() {
                     let resp = egui::Frame::none()
-                        .fill(CARD_HI)
+                        .fill(CARD_HI())
                         .rounding(8.0)
-                        .stroke(Stroke::new(1.0_f32, LINE))
+                        .stroke(Stroke::new(1.0_f32, LINE()))
                         .inner_margin(12.0)
                         .show(ui, |ui| {
                             ui.set_width(w - 26.0);
@@ -1127,8 +1187,8 @@ impl App {
                                     ui.label(RichText::new(*icon).size(18.0).color(*color));
                                     ui.label(RichText::new(*title).size(14.5).strong());
                                 });
-                                ui.add(egui::Label::new(RichText::new(*sub).size(12.0).color(MUTED)).truncate());
-                                ui.label(RichText::new(crate::tr!("Utiliser", "Open")).size(12.5).strong().color(ACCENT_DARK));
+                                ui.add(egui::Label::new(RichText::new(*sub).size(12.0).color(MUTED())).truncate());
+                                ui.label(RichText::new(crate::tr!("Utiliser", "Open")).size(12.5).strong().color(ACCENT_DARK()));
                             });
                         })
                         .response
@@ -1158,9 +1218,9 @@ impl App {
             let used: u64 = d.parts.iter().filter_map(|p| p.used).sum();
             let allocated: u64 = d.parts.iter().filter(|p| p.kind != Kind::Extended).map(|p| p.size).sum();
             let resp = egui::Frame::none()
-                .fill(CARD)
+                .fill(CARD())
                 .rounding(8.0)
-                .stroke(Stroke::new(1.0_f32, LINE))
+                .stroke(Stroke::new(1.0_f32, LINE()))
                 .inner_margin(egui::Margin::symmetric(14.0, 10.0))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
@@ -1169,17 +1229,17 @@ impl App {
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).strong());
-                                ui.label(RichText::new(&d.model).color(MUTED));
+                                ui.label(RichText::new(&d.model).color(MUTED()));
                                 if d.is_system || d.is_boot {
                                     badge(ui, "Windows", ICON_GREEN);
                                 }
                             });
-                            ui.label(RichText::new(format!("{} · {} · {} partition(s)", fmt_size(d.size), d.type_name(), d.parts.len())).size(12.0).color(MUTED));
+                            ui.label(RichText::new(format!("{} · {} · {} partition(s)", fmt_size(d.size), d.type_name(), d.parts.len())).size(12.0).color(MUTED()));
                             if d.size > 0 {
                                 let frac = used as f32 / d.size as f32;
                                 ui.add(egui::ProgressBar::new(frac).desired_width(380.0).text(crate::trf!("{} utilisés · {} non alloués", "{} used · {} unallocated", fmt_size(used), fmt_size(d.size.saturating_sub(allocated)))));
                             } else {
-                                ui.label(RichText::new(crate::tr!("Aucun support inséré", "No media inserted")).size(12.0).color(MUTED));
+                                ui.label(RichText::new(crate::tr!("Aucun support inséré", "No media inserted")).size(12.0).color(MUTED()));
                             }
                         });
                     });
@@ -1259,7 +1319,7 @@ impl App {
                     }
                 });
                 if frees.is_empty() {
-                    ui.label(RichText::new(crate::tr!("Aucun espace non alloué : réduisez ou supprimez d'abord une partition.", "No unallocated space: shrink or delete a partition first.")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Aucun espace non alloué : réduisez ou supprimez d'abord une partition.", "No unallocated space: shrink or delete a partition first.")).color(MUTED()));
                 }
                 ui.add_space(6.0);
                 if primary(ui, crate::tr!("Ajouter à la file d'attente", "Add to the queue"), self.clone_psrc.is_some() && self.clone_pdst.is_some()) {
@@ -1291,16 +1351,16 @@ impl App {
             let fits = d.size >= sys.used_extent() + gpt_tail_sectors(sys.sector) * sys.sector;
             let sel = self.mig_dst == Some(d.number);
             let resp = egui::Frame::none()
-                .fill(if sel { ACCENT.gamma_multiply(0.08) } else { CARD })
+                .fill(if sel { ACCENT.gamma_multiply(0.08) } else { CARD() })
                 .rounding(10.0)
-                .stroke(Stroke::new(if sel { 2.0_f32 } else { 1.0 }, if sel { ACCENT } else { LINE }))
+                .stroke(Stroke::new(if sel { 2.0_f32 } else { 1.0 }, if sel { ACCENT } else { LINE() }))
                 .inner_margin(12.0)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).strong());
                         ui.label(&d.model);
-                        ui.label(RichText::new(fmt_size(d.size)).color(MUTED));
+                        ui.label(RichText::new(fmt_size(d.size)).color(MUTED()));
                         if d.bus.contains("NVMe") || d.model.to_lowercase().contains("ssd") {
                             badge(ui, "SSD", ACCENT);
                         }
@@ -1318,7 +1378,7 @@ impl App {
         }
         ui.add_space(6.0);
         ui.checkbox(&mut self.fit, crate::tr!("Utiliser tout l'espace du disque cible (agrandir la dernière partition)", "Use all the space of the target disk (extend the last partition)"));
-        ui.label(RichText::new(crate::tr!("Après la copie, DiskCraft reconstruit le démarrage du nouveau disque : il suffit ensuite de le choisir dans le menu de démarrage du PC.", "After the copy, DiskCraft rebuilds the new disk's boot files: then just pick it in the PC's boot menu.")).color(MUTED));
+        ui.label(RichText::new(crate::tr!("Après la copie, DiskCraft reconstruit le démarrage du nouveau disque : il suffit ensuite de le choisir dans le menu de démarrage du PC.", "After the copy, DiskCraft rebuilds the new disk's boot files: then just pick it in the PC's boot menu.")).color(MUTED()));
         if let Some(t) = self.mig_dst {
             ui.label(RichText::new(crate::trf!("⚠ Tout le contenu du disque {t} sera remplacé.", "⚠ Everything on disk {t} will be replaced.")).color(DANGER));
         }
@@ -1333,7 +1393,7 @@ impl App {
         let disks = self.preview.clone();
         card(ui, |ui| {
             ui.label(RichText::new("MBR / GPT").size(15.0).strong());
-            ui.label(RichText::new(crate::tr!("GPT est nécessaire pour les disques de plus de 2 To et le démarrage UEFI ; MBR pour les vieux PC en BIOS.", "GPT is needed for disks larger than 2 TB and for UEFI boot; MBR for old BIOS PCs.")).color(MUTED));
+            ui.label(RichText::new(crate::tr!("GPT est nécessaire pour les disques de plus de 2 To et le démarrage UEFI ; MBR pour les vieux PC en BIOS.", "GPT is needed for disks larger than 2 TB and for UEFI boot; MBR for old BIOS PCs.")).color(MUTED()));
             disk_combo(ui, "conv", &disks, &mut self.conv_disk, |_| true);
             if let Some(d) = self.conv_disk.and_then(|n| disks.iter().find(|d| d.number == n)) {
                 let n = d.number;
@@ -1347,7 +1407,7 @@ impl App {
                     }
                 });
                 if d.is_system || d.is_boot {
-                    ui.label(RichText::new(crate::tr!("Disque de Windows : la conversion en GPT utilise l'outil mbr2gpt de Windows ; passez ensuite le PC en mode UEFI.", "Windows disk: the GPT conversion uses Windows' mbr2gpt tool; then switch the PC to UEFI mode.")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Disque de Windows : la conversion en GPT utilise l'outil mbr2gpt de Windows ; passez ensuite le PC en mode UEFI.", "Windows disk: the GPT conversion uses Windows' mbr2gpt tool; then switch the PC to UEFI mode.")).size(12.0).color(MUTED()));
                 }
             }
         });
@@ -1357,7 +1417,7 @@ impl App {
         let parts: Vec<(u32, Partition)> = self.all_parts().into_iter().filter(|(_, p)| p.fs == Fs::Ntfs && !p.protected()).map(|(n, p)| (n, p.clone())).collect();
         card(ui, |ui| {
             ui.label(RichText::new(crate::tr!("NTFS en FAT32", "NTFS to FAT32")).size(15.0).strong());
-            ui.label(RichText::new(crate::tr!("FAT32 se lit partout (TV, consoles, voitures, Mac). Limites : fichiers de 4 Go maximum, partition de 2 To maximum.", "FAT32 can be read everywhere (TVs, consoles, cars, Macs). Limits: files up to 4 GB, partitions up to 2 TB.")).color(MUTED));
+            ui.label(RichText::new(crate::tr!("FAT32 se lit partout (TV, consoles, voitures, Mac). Limites : fichiers de 4 Go maximum, partition de 2 To maximum.", "FAT32 can be read everywhere (TVs, consoles, cars, Macs). Limits: files up to 4 GB, partitions up to 2 TB.")).color(MUTED()));
             let txt = self
                 .fat_part
                 .and_then(|(n, o)| parts.iter().find(|(m, p)| *m == n && p.offset == o))
@@ -1373,7 +1433,7 @@ impl App {
                 letter_combo(ui, "tmp1", &mut self.temp_drive, &temp_choices, crate::tr!("choisir un lecteur", "choose a drive"));
                 if let Some(t) = self.temp_drive {
                     if let Some(f) = letters.iter().find(|l| l.0 == t) {
-                        ui.label(RichText::new(format!("{} libres", fmt_size(f.1))).color(MUTED));
+                        ui.label(RichText::new(format!("{} libres", fmt_size(f.1))).color(MUTED()));
                     }
                 }
             });
@@ -1385,10 +1445,10 @@ impl App {
         ui.add_space(10.0);
         card(ui, |ui| {
             ui.label(RichText::new(crate::tr!("Disque dynamique en disque de base", "Dynamic disk to basic disk")).size(15.0).strong());
-            ui.label(RichText::new(crate::tr!("Les volumes simples sont copiés à part, le disque est converti, puis les volumes sont recréés avec les mêmes lettres et remplis à nouveau.", "Simple volumes are copied aside, the disk is converted, then the volumes are recreated with the same letters and filled again.")).color(MUTED));
+            ui.label(RichText::new(crate::tr!("Les volumes simples sont copiés à part, le disque est converti, puis les volumes sont recréés avec les mêmes lettres et remplis à nouveau.", "Simple volumes are copied aside, the disk is converted, then the volumes are recreated with the same letters and filled again.")).color(MUTED()));
             disk_combo(ui, "dyn", &disks, &mut self.dyn_disk, |d| d.dynamic);
             if !disks.iter().any(|d| d.dynamic) {
-                ui.label(RichText::new(crate::tr!("Aucun disque dynamique sur ce PC.", "No dynamic disk on this PC.")).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Aucun disque dynamique sur ce PC.", "No dynamic disk on this PC.")).color(MUTED()));
             }
             ui.horizontal(|ui| {
                 ui.label(crate::tr!("Copie temporaire sur :", "Temporary copy on:"));
@@ -1408,7 +1468,7 @@ impl App {
             if adk && pe {
                 ui.label(RichText::new(crate::tr!("✔ Installés", "✔ Installed")).color(ACCENT));
             } else {
-                ui.label(RichText::new(crate::tr!("Les outils « Windows ADK » et « WinPE » ne sont pas installés (environ 4 Go, gratuits).", "The \"Windows ADK\" and \"WinPE\" tools are not installed (about 4 GB, free).")).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Les outils « Windows ADK » et « WinPE » ne sont pas installés (environ 4 Go, gratuits).", "The \"Windows ADK\" and \"WinPE\" tools are not installed (about 4 GB, free).")).color(MUTED()));
                 if primary(ui, crate::tr!("Installer les outils", "Install the tools"), true) {
                     acts.push(Act::RunNow(winpe::install_steps(), crate::tr!("Installation des outils WinPE", "Installing the WinPE tools").into()));
                 }
@@ -1431,7 +1491,7 @@ impl App {
                     letter_combo(ui, "usb", &mut self.pe_usb, &usb, crate::tr!("choisir", "choose"));
                 });
                 if usb.is_empty() {
-                    ui.label(RichText::new(crate::tr!("Branchez une clé USB puis cliquez sur « Actualiser ».", "Plug in a USB stick, then click \"Refresh\".")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Branchez une clé USB puis cliquez sur « Actualiser ».", "Plug in a USB stick, then click \"Refresh\".")).color(MUTED()));
                 }
             }
         });
@@ -1465,7 +1525,7 @@ impl App {
                     ui.output_mut(|o| o.copied_text = s);
                 }
             });
-            ui.label(RichText::new(crate::tr!("Joignez les informations copiées et le journal de l'opération : la communauté vous répond gratuitement.", "Attach the copied information and the operation log: the community answers for free.")).color(MUTED).size(12.0));
+            ui.label(RichText::new(crate::tr!("Joignez les informations copiées et le journal de l'opération : la communauté vous répond gratuitement.", "Attach the copied information and the operation log: the community answers for free.")).color(MUTED()).size(12.0));
         });
         ui.add_space(10.0);
         card(ui, |ui| {
@@ -1495,7 +1555,7 @@ impl App {
         if self.health_loading.is_some() {
             ui.horizontal(|ui| {
                 ui.add(egui::Spinner::new());
-                ui.label(RichText::new(crate::tr!("Lecture des valeurs SMART...", "Reading SMART values...")).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Lecture des valeurs SMART...", "Reading SMART values...")).color(MUTED()));
             });
             ui.add_space(8.0);
         } else if !self.demo && !crate::rawio::is_elevated() {
@@ -1511,17 +1571,17 @@ impl App {
             card(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(crate::trf!("Disque {}", "Disk {}", d.number)).size(15.0).strong());
-                    ui.label(RichText::new(&d.model).color(MUTED));
+                    ui.label(RichText::new(&d.model).color(MUTED()));
                     let (text, color) = match h.map(|h| h.level()).unwrap_or(HealthLevel::Unknown) {
                         HealthLevel::Good => (crate::tr!("Bon état", "Good"), ICON_GREEN),
                         HealthLevel::Warning => (crate::tr!("À surveiller", "Needs attention"), PENDING),
                         HealthLevel::Bad => (crate::tr!("Défaillant : sauvegardez vos données", "Failing: back up your data"), DANGER),
-                        HealthLevel::Unknown => (crate::tr!("Inconnu", "Unknown"), MUTED),
+                        HealthLevel::Unknown => (crate::tr!("Inconnu", "Unknown"), MUTED()),
                     };
                     badge(ui, text, color);
                 });
                 let Some(h) = h else {
-                    ui.label(RichText::new(crate::tr!("Windows ne fournit aucune information de santé pour ce disque.", "Windows gives no health information for this disk.")).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Windows ne fournit aucune information de santé pour ce disque.", "Windows gives no health information for this disk.")).color(MUTED()));
                     return;
                 };
                 ui.add_space(4.0);
@@ -1567,14 +1627,14 @@ impl App {
                 ];
                 egui::Grid::new(("health", d.number)).num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
                     for (k, v, c) in rows {
-                        ui.label(RichText::new(k).color(MUTED));
-                        ui.label(RichText::new(v).color(c.unwrap_or(TEXT)));
+                        ui.label(RichText::new(k).color(MUTED()));
+                        ui.label(RichText::new(v).color(c.unwrap_or(TEXT())));
                         ui.end_row();
                     }
                 });
                 if !h.has_counters() {
                     ui.add_space(4.0);
-                    ui.label(RichText::new(crate::tr!("Ce disque ne transmet pas ses compteurs SMART (fréquent pour les disques USB).", "This disk does not report its SMART counters (common for USB disks).")).color(MUTED).size(12.0));
+                    ui.label(RichText::new(crate::tr!("Ce disque ne transmet pas ses compteurs SMART (fréquent pour les disques USB).", "This disk does not report its SMART counters (common for USB disks).")).color(MUTED()).size(12.0));
                 }
             });
         }
@@ -1584,18 +1644,43 @@ impl App {
         heading(ui, crate::tr!("Paramètres", "Settings"), crate::tr!("Préférences de DiskCraft.", "DiskCraft preferences."));
         card(ui, |ui| {
             ui.label(RichText::new(format!("🌐  {}", crate::tr!("Langue", "Language"))).size(15.0).strong());
-            ui.label(RichText::new(crate::tr!("Le choix est mémorisé pour les prochains lancements.", "Your choice is remembered for next launches.")).color(MUTED));
+            ui.label(RichText::new(crate::tr!("Le choix est mémorisé pour les prochains lancements.", "Your choice is remembered for next launches.")).color(MUTED()));
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 let en = crate::i18n::en();
                 for (label, english) in [("English", true), ("Français", false)] {
                     let sel = en == english;
-                    let b = egui::Button::new(RichText::new(label).size(13.5).color(if sel { Color32::WHITE } else { TEXT }))
+                    let b = egui::Button::new(RichText::new(label).size(13.5).color(if sel { Color32::WHITE } else { TEXT() }))
                         .fill(if sel { ACCENT } else { Color32::TRANSPARENT })
-                        .stroke(Stroke::new(1.0_f32, if sel { ACCENT } else { LINE }))
+                        .stroke(Stroke::new(1.0_f32, if sel { ACCENT } else { LINE() }))
                         .rounding(14.0);
                     if ui.add(b).clicked() && !sel {
                         crate::i18n::set_english(english);
+                        ui.ctx().request_repaint();
+                    }
+                }
+            });
+        });
+        ui.add_space(10.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("🎨  {}", crate::tr!("Thème", "Theme"))).size(15.0).strong());
+            ui.label(RichText::new(crate::tr!("Clair, sombre, ou comme Windows. Le choix est mémorisé.", "Light, dark, or the same as Windows. Your choice is remembered.")).color(MUTED()));
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let cur = theme_pref::load();
+                for (label, pref) in [
+                    (crate::tr!("Suivre le système", "Follow system"), theme_pref::Pref::System),
+                    (crate::tr!("Clair", "Light"), theme_pref::Pref::Light),
+                    (crate::tr!("Sombre", "Dark"), theme_pref::Pref::Dark),
+                ] {
+                    let sel = cur == pref;
+                    let b = egui::Button::new(RichText::new(label).size(13.5).color(if sel { Color32::WHITE } else { TEXT() }))
+                        .fill(if sel { ACCENT } else { Color32::TRANSPARENT })
+                        .stroke(Stroke::new(1.0_f32, if sel { ACCENT } else { LINE() }))
+                        .rounding(14.0);
+                    if ui.add(b).clicked() && !sel {
+                        theme_pref::save(pref);
+                        ui.ctx().set_theme(pref.egui());
                         ui.ctx().request_repaint();
                     }
                 }
@@ -1624,7 +1709,7 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new(crate::tr!("Compatibilité", "Compatibility")).size(15.0).strong());
             ui.label("Windows 11, Windows 10 · Windows Server 2025, 2022, 2019, 2016");
-            ui.label(RichText::new(crate::tr!("Windows plus anciens (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server) : utilisez le disque de démarrage WinPE, qui démarre ces PC et gère leurs disques.", "Older Windows (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server): use the WinPE boot disk, which starts these PCs and manages their disks.")).color(MUTED));
+            ui.label(RichText::new(crate::tr!("Windows plus anciens (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server) : utilisez le disque de démarrage WinPE, qui démarre ces PC et gère leurs disques.", "Older Windows (8.1, 8, 7, Vista, XP, Server 2012/2008/2003, Home Server): use the WinPE boot disk, which starts these PCs and manages their disks.")).color(MUTED()));
         });
         ui.add_space(10.0);
         card(ui, |ui| {
@@ -1672,7 +1757,7 @@ impl App {
                     crate::tr!("Faites glisser la partition (en bleu) sur la carte du disque pour la poser où vous voulez dans un espace libre, puis réglez sa taille en dessous.", "Drag the partition (in blue) on the disk map to drop it anywhere in free space, then set its size below.")
                 } else {
                     crate::tr!("Faites glisser les bords de la barre du bas pour changer la taille de la partition.", "Drag the edges of the bottom bar to change the partition's size.")
-                }).color(MUTED));
+                }).color(MUTED()));
                 ui.add_space(6.0);
 
                 // ---- Whole-disk map: the other partitions stay in place, the selected one is dragged.
@@ -1742,15 +1827,15 @@ impl App {
                             painter.rect_filled(egui::Rect::from_min_size(r.min, Vec2::new(r.width(), 4.0)), Rounding { nw: 5.0, ne: 5.0, sw: 0.0, se: 0.0 }, c);
                             painter.rect_stroke(r, 5.0, Stroke::new(1.0_f32, c.gamma_multiply(0.5)));
                             let pc = painter.with_clip_rect(r.shrink(2.0));
-                            pc.text(r.left_top() + Vec2::new(6.0, 12.0), Align2::LEFT_TOP, p.title(), FontId::proportional(12.0), TEXT);
-                            pc.text(r.left_top() + Vec2::new(6.0, 30.0), Align2::LEFT_TOP, fmt_size(p.size), FontId::proportional(11.0), MUTED);
+                            pc.text(r.left_top() + Vec2::new(6.0, 12.0), Align2::LEFT_TOP, p.title(), FontId::proportional(12.0), TEXT());
+                            pc.text(r.left_top() + Vec2::new(6.0, 30.0), Align2::LEFT_TOP, fmt_size(p.size), FontId::proportional(11.0), MUTED());
                         }
                         None => {
-                            painter.rect_filled(r, 5.0, Color32::from_rgb(0x2c, 0x2e, 0x34));
+                            painter.rect_filled(r, 5.0, TRACK());
                             let pc = painter.with_clip_rect(r);
                             let mut xx = r.left() - h;
                             while xx < r.right() {
-                                pc.line_segment([egui::pos2(xx, r.bottom()), egui::pos2(xx + h, r.top())], Stroke::new(1.0_f32, Color32::from_rgb(0x42, 0x45, 0x4d)));
+                                pc.line_segment([egui::pos2(xx, r.bottom()), egui::pos2(xx + h, r.top())], Stroke::new(1.0_f32, HATCH()));
                                 xx += 8.0;
                             }
                         }
@@ -1768,7 +1853,7 @@ impl App {
                 let sx1 = to_x(*pos + size_b).max(sx0 + 30.0);
                 let sel = egui::Rect::from_min_max(egui::pos2(sx0, map.top() - 2.0), egui::pos2(sx1, map.bottom() + 2.0));
                 painter.rect_filled(sel, 5.0, ACCENT.gamma_multiply(0.85));
-                painter.rect_stroke(sel, 5.0, Stroke::new(2.0_f32, ACCENT_DARK));
+                painter.rect_stroke(sel, 5.0, Stroke::new(2.0_f32, ACCENT_DARK()));
                 let pc = painter.with_clip_rect(sel.shrink(2.0));
                 let title = dk.part_at(*offset).map(|i| dk.parts[i].title()).unwrap_or_default();
                 pc.text(sel.left_top() + Vec2::new(6.0, 13.0), Align2::LEFT_TOP, title, FontId::proportional(12.0), Color32::WHITE);
@@ -1810,7 +1895,7 @@ impl App {
                     }
                 }
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", dk.number, fmt_size(dk.size), dk.type_name())).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::trf!("Disque {} · {} · {}", "Disk {} · {} · {}", dk.number, fmt_size(dk.size), dk.type_name())).size(12.0).color(MUTED()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add_enabled(*can_resize, egui::Button::new(crate::tr!("Remplir tout l'espace non alloué", "Fill all unallocated space")).rounding(6.0)).clicked() {
                             if *can_move {
@@ -1834,17 +1919,17 @@ impl App {
                 let x1 = x0 + (*size_mb as f32 * px_per_mb).max(16.0);
                 let part = egui::Rect::from_min_max(egui::pos2(x0, rect.top()), egui::pos2(x1.min(rect.right()), rect.bottom()));
                 let p = ui.painter();
-                p.rect_filled(rect, 6.0, Color32::from_rgb(0x2c, 0x2e, 0x34));
+                p.rect_filled(rect, 6.0, TRACK());
                 let mut xx = rect.left() - 46.0;
                 while xx < rect.right() {
-                    p.with_clip_rect(rect).line_segment([egui::pos2(xx, rect.bottom()), egui::pos2(xx + 46.0, rect.top())], Stroke::new(1.0_f32, Color32::from_rgb(0x42, 0x45, 0x4d)));
+                    p.with_clip_rect(rect).line_segment([egui::pos2(xx, rect.bottom()), egui::pos2(xx + 46.0, rect.top())], Stroke::new(1.0_f32, HATCH()));
                     xx += 8.0;
                 }
                 p.rect_filled(part, 6.0, Color32::from_rgb(0x2f, 0x7f, 0xd8).gamma_multiply(0.85));
-                p.rect_stroke(part, 6.0, Stroke::new(2.0_f32, ACCENT_DARK));
+                p.rect_stroke(part, 6.0, Stroke::new(2.0_f32, ACCENT_DARK()));
                 for hx in [part.left() + 1.0, part.right() - 1.0] {
-                    p.circle_filled(egui::pos2(hx, part.center().y), 7.0, ACCENT_DARK);
-                    p.text(egui::pos2(hx, part.center().y), Align2::CENTER_CENTER, "‖", FontId::proportional(10.0), NAV);
+                    p.circle_filled(egui::pos2(hx, part.center().y), 7.0, ACCENT_DARK());
+                    p.text(egui::pos2(hx, part.center().y), Align2::CENTER_CENTER, "‖", FontId::proportional(10.0), NAV());
                 }
                 p.text(part.center(), Align2::CENTER_CENTER, fmt_size((*size_mb as u64) * MIB), FontId::proportional(13.0), Color32::WHITE);
                 let edge = 9.0;
@@ -1882,11 +1967,11 @@ impl App {
                 egui::Grid::new("resize_grid").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
                     ui.label(crate::tr!("Espace non alloué avant :", "Unallocated space before:"));
                     ui.add_enabled(*can_move, egui::DragValue::new(&mut start_mb).range(0.0..=(total_mb - *size_mb).max(0.0)).speed(16.0).suffix(crate::tr!(" Mo", " MB")));
-                    ui.label(RichText::new(fmt_size((start_mb as u64) * MIB)).color(MUTED));
+                    ui.label(RichText::new(fmt_size((start_mb as u64) * MIB)).color(MUTED()));
                     ui.end_row();
                     ui.label(crate::tr!("Taille de la partition :", "Partition size:"));
                     ui.add_enabled(*can_resize, egui::DragValue::new(size_mb).range(min_mb..=(total_mb - start_mb).min(max_mb).max(min_mb)).speed(16.0).suffix(crate::tr!(" Mo", " MB")));
-                    ui.label(RichText::new(fmt_size((*size_mb as u64) * MIB)).color(MUTED));
+                    ui.label(RichText::new(fmt_size((*size_mb as u64) * MIB)).color(MUTED()));
                     ui.end_row();
                     let mut after = (total_mb - start_mb - *size_mb).max(0.0);
                     ui.label(crate::tr!("Espace non alloué après :", "Unallocated space after:"));
@@ -1897,7 +1982,7 @@ impl App {
                             start_mb = (total_mb - *size_mb - after).clamp(0.0, (total_mb - *size_mb).max(0.0));
                         }
                     }
-                    ui.label(RichText::new(fmt_size((after as u64) * MIB)).color(MUTED));
+                    ui.label(RichText::new(fmt_size((after as u64) * MIB)).color(MUTED()));
                     ui.end_row();
                 });
                 *size_mb = size_mb.round();
@@ -1906,10 +1991,10 @@ impl App {
                     *pos = (rs + (start_mb as u64) * MIB).min(re.saturating_sub(size_of(*size_mb))).max(rs);
                 }
                 if !*can_resize {
-                    ui.label(RichText::new(crate::tr!("Ce système de fichiers peut être déplacé mais pas redimensionné (seul NTFS se redimensionne).", "This file system can be moved but not resized (only NTFS can be resized).")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Ce système de fichiers peut être déplacé mais pas redimensionné (seul NTFS se redimensionne).", "This file system can be moved but not resized (only NTFS can be resized).")).size(12.0).color(MUTED()));
                 }
                 if !*can_move {
-                    ui.label(RichText::new(crate::tr!("Windows utilise cette partition : elle peut changer de taille mais pas de place. Pour la déplacer, démarrez sur le disque de démarrage DiskCraft.", "Windows is using this partition: its size can change but not its place. To move it, start the PC from the DiskCraft boot disk.")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(crate::tr!("Windows utilise cette partition : elle peut changer de taille mais pas de place. Pour la déplacer, démarrez sur le disque de démarrage DiskCraft.", "Windows is using this partition: its size can change but not its place. To move it, start the PC from the DiskCraft boot disk.")).size(12.0).color(MUTED()));
                 }
                 let moving = *pos != *offset;
                 if moving {
@@ -1978,7 +2063,7 @@ impl App {
             Dlg::Wipe { disk, offset, passes } => {
                 ui.label(crate::tr!("Les données sont écrasées et ne pourront plus être récupérées, même avec un logiciel spécialisé.", "The data is overwritten and can no longer be recovered, even with specialised software."));
                 ui.add(egui::Slider::new(passes, 1..=10).text(crate::tr!("passe(s)", "pass(es)")));
-                ui.label(RichText::new(crate::tr!("Chaque passe sauf la dernière écrit des données aléatoires ; la dernière écrit des zéros.", "Every pass but the last writes random data; the last one writes zeros.")).size(12.0).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Chaque passe sauf la dernière écrit des données aléatoires ; la dernière écrit des zéros.", "Every pass but the last writes random data; the last one writes zeros.")).size(12.0).color(MUTED()));
                 if primary(ui, crate::tr!("Effacer", "Wipe"), true) {
                     acts.push(Act::Add(match offset {
                         Some(o) => Op::WipePart { disk: *disk, offset: *o, passes: *passes },
@@ -2028,7 +2113,7 @@ impl App {
                 ui.radio_value(mode, 0, crate::tr!("Rechercher les erreurs (sans rien modifier)", "Look for errors (without changing anything)"));
                 ui.radio_value(mode, 1, crate::tr!("Rechercher et réparer les erreurs", "Look for and repair errors"));
                 ui.radio_value(mode, 2, crate::tr!("Test de surface (lire chaque secteur)", "Surface test (read every sector)"));
-                ui.label(RichText::new(crate::tr!("La vérification se lance tout de suite ; elle ne passe pas par la file d'attente.", "The check starts right away; it does not go through the queue.")).size(12.0).color(MUTED));
+                ui.label(RichText::new(crate::tr!("La vérification se lance tout de suite ; elle ne passe pas par la file d'attente.", "The check starts right away; it does not go through the queue.")).size(12.0).color(MUTED()));
                 if primary(ui, crate::tr!("Lancer", "Start"), true) {
                     if let Some(d) = preview.iter().find(|d| d.number == *disk) {
                         if let Some(i) = d.part_at(*offset) {
@@ -2064,7 +2149,7 @@ impl App {
                 }
                 ui.add_space(6.0);
                 ui.checkbox(backup_ok, crate::tr!("J'ai sauvegardé mes fichiers importants et le PC restera branché", "I have backed up my important files and the PC will stay plugged in"));
-                ui.label(RichText::new(crate::tr!("Ne coupez pas le courant pendant l'opération.", "Do not cut the power during the operation.")).size(12.0).color(MUTED));
+                ui.label(RichText::new(crate::tr!("Ne coupez pas le courant pendant l'opération.", "Do not cut the power during the operation.")).size(12.0).color(MUTED()));
                 if primary(ui, crate::tr!("Exécuter maintenant", "Execute now"), *backup_ok && ok) {
                     acts.push(Act::Execute);
                     close = true;
@@ -2092,7 +2177,7 @@ impl App {
                         ui.label(&r.step);
                     });
                     ui.add(egui::ProgressBar::new(r.pct).show_percentage());
-                    ui.label(RichText::new(crate::tr!("Ne coupez pas le courant et ne débranchez pas les disques.", "Do not cut the power or unplug the disks.")).color(MUTED).size(12.0));
+                    ui.label(RichText::new(crate::tr!("Ne coupez pas le courant et ne débranchez pas les disques.", "Do not cut the power or unplug the disks.")).color(MUTED()).size(12.0));
                 }
                 Some(true) => {
                     ui.label(RichText::new(crate::tr!("✔ Terminé avec succès", "✔ Completed successfully")).size(16.0).color(ACCENT).strong());
@@ -2139,4 +2224,48 @@ fn open_url(url: &str) {
         c.creation_flags(0x0800_0000);
     }
     let _ = c.spawn();
+}
+
+/// Theme chosen in Settings, remembered next to the language choice.
+mod theme_pref {
+    #[derive(Clone, Copy, PartialEq)]
+    pub enum Pref {
+        System,
+        Light,
+        Dark,
+    }
+    impl Pref {
+        pub fn egui(self) -> egui::ThemePreference {
+            match self {
+                Pref::System => egui::ThemePreference::System,
+                Pref::Light => egui::ThemePreference::Light,
+                Pref::Dark => egui::ThemePreference::Dark,
+            }
+        }
+    }
+    fn file() -> Option<std::path::PathBuf> {
+        let base = std::env::var_os("APPDATA")?;
+        Some(std::path::PathBuf::from(base).join("DiskCraft").join("theme.txt"))
+    }
+    /// Saved choice; dark (DiskCraft's original look) when nothing was chosen yet.
+    pub fn load() -> Pref {
+        let saved = std::env::var("DISKCRAFT_THEME").ok().or_else(|| file().and_then(|p| std::fs::read_to_string(p).ok()));
+        match saved.as_deref().map(str::trim) {
+            Some("system") => Pref::System,
+            Some("light") => Pref::Light,
+            _ => Pref::Dark,
+        }
+    }
+    pub fn save(p: Pref) {
+        if let Some(f) = file() {
+            if let Some(dir) = f.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(f, match p {
+                Pref::System => "system",
+                Pref::Light => "light",
+                Pref::Dark => "dark",
+            });
+        }
+    }
 }
