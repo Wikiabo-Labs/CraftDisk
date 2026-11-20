@@ -25,7 +25,7 @@ jobs:
       - name: Build
         run: cargo build --release --locked
       - name: Tests
-        run: cargo test --release --locked
+        run: cargo test --locked
 
   # Every pull request into main must bring a new version and its patch notes.
   version:

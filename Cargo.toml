@@ -21,7 +21,7 @@ sha2 = "0.10"
 base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_IO"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_IO", "Win32_System_Threading"] }
 
 [build-dependencies]
 resvg = { version = "0.45", default-features = false }
