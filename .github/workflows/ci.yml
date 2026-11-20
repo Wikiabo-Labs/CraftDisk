@@ -26,3 +26,23 @@ jobs:
         run: cargo build --release --locked
       - name: Tests
         run: cargo test --release --locked
+
+  # Every pull request into main must bring a new version and its patch notes.
+  version:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check version bump and changelog
+        shell: pwsh
+        run: |
+          function Get-Ver($text) { ([regex]::Match($text, '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value }
+          $new = Get-Ver (Get-Content Cargo.toml -Raw)
+          $old = Get-Ver ((git show "origin/${{ github.base_ref }}:Cargo.toml") -join "`n")
+          Write-Output "main: $old  ->  this branch: $new"
+          if ([version]$new -le [version]$old) { throw "Bump the version in Cargo.toml (main is $old)." }
+          if (-not (Select-String -Path CHANGELOG.md -Pattern ('^## \[' + [regex]::Escape($new) + '\]') -Quiet)) {
+            throw "Add a '## [$new]' section to CHANGELOG.md."
+          }
