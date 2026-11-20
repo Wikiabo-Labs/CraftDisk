@@ -1,51 +1,87 @@
 name: Release
 
-# Publishes a GitHub release with the Windows program when a version tag is pushed:
-#   git tag v0.1.0 && git push origin v0.1.0
+# A release is published only from `main`: when a pull request is merged and the version in
+# Cargo.toml has no release yet, the Windows program is built and published with the patch notes
+# of that version taken from CHANGELOG.md. Older releases are kept, so every version stays available.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to build and publish (e.g. v0.1.0)"
-        required: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   windows:
     runs-on: windows-latest
     env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - name: Install Rust toolchain (GNU, as in rust-toolchain.toml)
-        shell: pwsh
-        run: rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
-      - name: Build
-        run: cargo build --release --locked
-      - name: Package
+
+      - name: Read version
+        id: version
         shell: pwsh
         run: |
+          $m = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $ver = $m.Matches[0].Groups[1].Value
+          $tag = "v$ver"
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "Release $tag already exists: nothing to publish."
+            "publish=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "publish=true" >> $env:GITHUB_OUTPUT
+          }
+          exit 0
+
+      - name: Extract patch notes
+        if: steps.version.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.version.outputs.version }}'
+          $lines = Get-Content CHANGELOG.md -Encoding UTF8
+          $start = ($lines | Select-String -Pattern ('^## \[' + [regex]::Escape($ver) + '\]') | Select-Object -First 1).LineNumber
+          if (-not $start) { throw "CHANGELOG.md has no section for $ver" }
+          $notes = @()
+          foreach ($l in $lines[$start..($lines.Count - 1)]) {
+            if ($l -match '^## \[') { break }
+            $notes += $l
+          }
+          ($notes -join "`n").Trim() | Set-Content notes.md -Encoding utf8
+
+      - name: Install Rust toolchain (GNU, as in rust-toolchain.toml)
+        if: steps.version.outputs.publish == 'true'
+        shell: pwsh
+        run: rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+
+      - name: Build
+        if: steps.version.outputs.publish == 'true'
+        run: cargo build --release --locked
+
+      - name: Package
+        if: steps.version.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item target/release/DiskCraft.exe dist/DiskCraft.exe
-          Compress-Archive -Path dist/DiskCraft.exe -DestinationPath "dist/DiskCraft-$env:TAG-windows-x64.zip"
+          Compress-Archive -Path dist/DiskCraft.exe -DestinationPath "dist/DiskCraft-$tag-windows-x64.zip"
           Get-ChildItem dist -File | ForEach-Object {
             $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$h  $($_.Name)"
           } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+
       - name: Publish release
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $files = @("dist/DiskCraft.exe", "dist/DiskCraft-$env:TAG-windows-x64.zip", "dist/SHA256SUMS.txt")
-          gh release view $env:TAG *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:TAG @files --clobber
-          } else {
-            gh release create $env:TAG @files --title $env:TAG --generate-notes
-          }
+          $tag = '${{ steps.version.outputs.tag }}'
+          gh release create $tag dist/DiskCraft.exe "dist/DiskCraft-$tag-windows-x64.zip" dist/SHA256SUMS.txt `
+            --target $env:GITHUB_SHA --title "DiskCraft $tag" --notes-file notes.md --latest

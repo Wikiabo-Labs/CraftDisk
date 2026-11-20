@@ -1,6 +1,6 @@
 [package]
 name = "diskcraft"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "DiskCraft - gestionnaire de disques et de partitions libre et gratuit"
 license = "GPL-3.0-or-later"
@@ -21,7 +21,7 @@ sha2 = "0.10"
 base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_IO"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_IO", "Win32_System_Threading"] }
 
 [build-dependencies]
 resvg = { version = "0.45", default-features = false }

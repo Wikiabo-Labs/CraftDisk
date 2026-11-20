@@ -214,3 +214,120 @@ pub fn demo_disks() -> Vec<Disk> {
         },
     ]
 }
+
+const HEALTH_SCRIPT: &str = r#"
+$ErrorActionPreference='SilentlyContinue'
+$pred = @{}
+Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus | ForEach-Object { $pred[[string]$_.InstanceName] = [bool]$_.PredictFailure }
+$drives = @{}
+Get-CimInstance Win32_DiskDrive | ForEach-Object { $drives[[int]$_.Index] = [string]$_.PNPDeviceID }
+$out = foreach ($p in Get-PhysicalDisk) {
+  $n = [int]$p.DeviceId
+  $r = $p | Get-StorageReliabilityCounter
+  $pf = $null
+  $pnp = $drives[$n]
+  if ($pnp) { foreach ($k in $pred.Keys) { if ($k.StartsWith($pnp, [StringComparison]::OrdinalIgnoreCase)) { $pf = $pred[$k] } } }
+  [pscustomobject]@{Number=$n;Status=[string]$p.HealthStatus;Operational=[string]($p.OperationalStatus -join ', ');Media=[string]$p.MediaType;Bus=[string]$p.BusType;Firmware=[string]$p.FirmwareVersion;Serial=([string]$p.SerialNumber).Trim();Temperature=$r.Temperature;TemperatureMax=$r.TemperatureMax;Wear=$r.Wear;PowerOnHours=$r.PowerOnHours;ReadErrors=$r.ReadErrorsTotal;ReadErrorsUncorrected=$r.ReadErrorsUncorrected;WriteErrors=$r.WriteErrorsTotal;WriteErrorsUncorrected=$r.WriteErrorsUncorrected;StartStop=$r.StartStopCycleCount;LoadUnload=$r.LoadUnloadCycleCount;PredictFailure=$pf}
+}
+ConvertTo-Json -InputObject @($out) -Depth 3 -Compress
+"#;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct RawHealth {
+    number: u32,
+    status: Option<String>,
+    operational: Option<String>,
+    media: Option<String>,
+    bus: Option<String>,
+    firmware: Option<String>,
+    serial: Option<String>,
+    temperature: Option<u32>,
+    temperature_max: Option<u32>,
+    wear: Option<u32>,
+    power_on_hours: Option<u64>,
+    read_errors: Option<u64>,
+    read_errors_uncorrected: Option<u64>,
+    write_errors: Option<u64>,
+    write_errors_uncorrected: Option<u64>,
+    start_stop: Option<u64>,
+    load_unload: Option<u64>,
+    predict_failure: Option<bool>,
+}
+
+/// Health of every physical disk, by disk number (read-only).
+pub fn load_health() -> Result<std::collections::HashMap<u32, Health>, String> {
+    let mut text = String::new();
+    crate::worker::run_ps_file(HEALTH_SCRIPT, &mut |l| {
+        text.push_str(l);
+        text.push('\n');
+    })?;
+    let start = text.find('[').ok_or_else(|| format!("Réponse inattendue : {}", text.trim()))?;
+    let raw: Vec<RawHealth> = serde_json::from_str(text[start..].trim()).map_err(|e| e.to_string())?;
+    // A temperature of 0 °C means "not reported".
+    let nz = |v: Option<u32>| v.filter(|&t| t > 0);
+    Ok(raw
+        .into_iter()
+        .map(|r| {
+            (
+                r.number,
+                Health {
+                    status: r.status.unwrap_or_default(),
+                    operational: r.operational.unwrap_or_default(),
+                    media: r.media.unwrap_or_default(),
+                    bus: r.bus.unwrap_or_default(),
+                    firmware: r.firmware.unwrap_or_default(),
+                    serial: r.serial.unwrap_or_default(),
+                    temperature: nz(r.temperature),
+                    temperature_max: nz(r.temperature_max),
+                    wear: r.wear,
+                    power_on_hours: r.power_on_hours,
+                    read_errors: r.read_errors,
+                    read_errors_uncorrected: r.read_errors_uncorrected,
+                    write_errors: r.write_errors,
+                    write_errors_uncorrected: r.write_errors_uncorrected,
+                    start_stop_cycles: r.start_stop,
+                    load_unload_cycles: r.load_unload,
+                    predict_failure: r.predict_failure,
+                    ..Default::default()
+                },
+            )
+        })
+        .map(|(n, mut h)| {
+            // Windows' counters are often empty (NVMe especially): ask the drive itself.
+            if let Some(s) = crate::smart::read(n) {
+                h.temperature = h.temperature.or(s.temperature);
+                h.wear = h.wear.or(s.wear);
+                h.power_on_hours = h.power_on_hours.or(s.power_on_hours);
+                h.start_stop_cycles = h.start_stop_cycles.or(s.start_stop);
+                h.load_unload_cycles = h.load_unload_cycles.or(s.load_unload);
+                h.available_spare = s.available_spare;
+                h.available_spare_threshold = s.available_spare_threshold;
+                h.critical_warning = s.critical_warning;
+                h.power_cycles = s.power_cycles;
+                h.unsafe_shutdowns = s.unsafe_shutdowns;
+                h.media_errors = s.media_errors;
+                h.error_log_entries = s.error_log_entries;
+                h.data_read = s.data_read;
+                h.data_written = s.data_written;
+                h.reallocated = s.reallocated;
+                h.pending = s.pending;
+                h.uncorrectable = s.uncorrectable;
+                h.crc_errors = s.crc_errors;
+                if h.predict_failure.is_none() {
+                    h.predict_failure = s.critical_warning.map(|c| c != 0).or(s.threshold_exceeded);
+                }
+            }
+            (n, h)
+        })
+        .collect())
+}
+
+/// Example health values for the demo disks.
+pub fn demo_health() -> std::collections::HashMap<u32, Health> {
+    let mut m = std::collections::HashMap::new();
+    m.insert(0, Health { status: "Healthy".into(), operational: "OK".into(), media: "SSD".into(), bus: "NVMe".into(), firmware: "5B2QGXA7".into(), serial: "S0000000000001".into(), temperature: Some(41), temperature_max: Some(68), wear: Some(3), power_on_hours: Some(4210), read_errors: Some(0), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: None, load_unload_cycles: None, predict_failure: Some(false), available_spare: Some(100), available_spare_threshold: Some(10), critical_warning: Some(0), power_cycles: Some(1312), unsafe_shutdowns: Some(41), media_errors: Some(0), error_log_entries: Some(0), data_read: Some(28 * 1_000_000_000_000), data_written: Some(19 * 1_000_000_000_000), ..Default::default() });
+    m.insert(1, Health { status: "Warning".into(), operational: "OK".into(), media: "HDD".into(), bus: "SATA".into(), firmware: "CC43".into(), serial: "WD-0000000002".into(), temperature: Some(46), temperature_max: Some(55), wear: None, power_on_hours: Some(38950), read_errors: Some(12), read_errors_uncorrected: Some(0), write_errors: Some(0), write_errors_uncorrected: Some(0), start_stop_cycles: Some(2810), load_unload_cycles: Some(91500), predict_failure: Some(false), power_cycles: Some(2790), reallocated: Some(8), pending: Some(0), uncorrectable: Some(0), crc_errors: Some(0), ..Default::default() });
+    m.insert(2, Health { status: "Healthy".into(), operational: "OK".into(), media: "Unspecified".into(), bus: "USB".into(), ..Default::default() });
+    m
+}

@@ -25,4 +25,43 @@ jobs:
       - name: Build
         run: cargo build --release --locked
       - name: Tests
-        run: cargo test --release --locked
+        run: cargo test --locked
+
+  # Pull requests into dev: describe the change in the "Unreleased" section of CHANGELOG.md,
+  # without touching the version.
+  changelog:
+    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check changelog entry
+        shell: pwsh
+        run: |
+          $diff = git diff "origin/${{ github.base_ref }}...HEAD" -- CHANGELOG.md
+          if (-not $diff) { throw "Describe this change under '## [Unreleased]' in CHANGELOG.md." }
+          if (-not (Select-String -Path CHANGELOG.md -Pattern '^## \[Unreleased\]' -Quiet) -and -not '${{ github.head_ref }}'.StartsWith('release/')) {
+            throw "CHANGELOG.md needs a '## [Unreleased]' section."
+          }
+
+  # Pull requests into main are releases: they come from dev, bring a new version and its notes.
+  release:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check source branch, version bump and changelog
+        shell: pwsh
+        run: |
+          if ('${{ github.head_ref }}' -ne 'dev') { throw "Only dev is merged into main (this is ${{ github.head_ref }})." }
+          function Get-Ver($text) { ([regex]::Match($text, '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value }
+          $new = Get-Ver (Get-Content Cargo.toml -Raw)
+          $old = Get-Ver ((git show "origin/${{ github.base_ref }}:Cargo.toml") -join "`n")
+          Write-Output "main: $old  ->  dev: $new"
+          if ([version]$new -le [version]$old) { throw "Bump the version in Cargo.toml (main is $old)." }
+          if (-not (Select-String -Path CHANGELOG.md -Pattern ('^## \[' + [regex]::Escape($new) + '\]') -Quiet)) {
+            throw "Rename '## [Unreleased]' to '## [$new] - date' in CHANGELOG.md."
+          }

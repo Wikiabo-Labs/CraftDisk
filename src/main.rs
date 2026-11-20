@@ -11,6 +11,7 @@ mod ops;
 mod plan;
 mod probe;
 mod rawio;
+mod smart;
 mod ui;
 mod winpe;
 mod worker;
