@@ -8,26 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-20
+
 ### Added
-- `CHANGELOG.md` and `CONTRIBUTING.md`.
 - **Disk health** page, right under Home: an overall verdict per disk (Good / Needs attention / Failing), Windows' health status, temperature, SSD wear and life left, power-on hours, read and write errors, firmware and serial number. Values are read automatically when DiskCraft starts, together with the disk scan, and again on Refresh.
 - Theme choice in **Settings**: follow Windows, light or dark, in the same style as the language choice. Dark stays the default; every page has a light palette.
+- `CHANGELOG.md` and `CONTRIBUTING.md`.
 
 ### Changed
-- The actions of the right panel (Resize / move, Format, Delete...) are highlighted in grey under the mouse, like the main menu, and show a hand cursor.
-- Changes are developed on their own branches and gathered on `dev`; a version, with all its
-  changes, is released by merging `dev` into `main`. Pull requests are checked for a changelog
-  entry, and releases for a version bump.
-- Releases are published automatically from `main` only. Each release carries the patch notes of its version from this changelog, and every past version stays available on the Releases page.
+- DiskCraft asks for administrator rights once, when it opens (the Windows UAC prompt appears on double-click), instead of before every operation. The helper that runs the queue inherits them.
 - Merging copies the files to the root of the first partition. A file whose name is already used there gets the date and time added to its name: `test.txt` becomes `test-11-23-25-20-11-2026.txt` (`HH-mm-ss-dd-MM-yyyy`).
 - The second partition is deleted only after every one of its files is found on the first partition with the same size; otherwise the merge stops and nothing is deleted.
-- DiskCraft asks for administrator rights once, when it opens, instead of before every operation. The helper that runs the queue inherits them.
 - Disk health lists only the values the drive reports, instead of showing "—" for the others.
+- The actions of the right panel (Resize / move, Format, Delete...) are highlighted in grey under the mouse, like the main menu, and show a hand cursor.
+- Releases are published automatically from `main` only. Each release carries the patch notes of its version from this changelog, and every past version stays available on the Releases page.
+- Changes are developed on their own branches and gathered on `dev`; a version, with all its changes, is released by merging `dev` into `main`. Pull requests are checked for a changelog entry, and releases for a version bump.
 
 ### Fixed
-- The "Create a partition" action showed an empty square instead of its icon (the character was missing from the interface fonts).
 - Merging two partitions no longer seems to lose the files of the second one. They used to be copied into a "Contents of X" folder that robocopy marked hidden and system, so File Explorer did not show it.
 - Disk health showed "—" for most values on NVMe drives, because Windows' reliability counters leave them empty. DiskCraft now reads the drive's own SMART data: the NVMe health log (power-on hours, power cycles, unsafe shutdowns, media errors, error log entries, available spare, data read and written, critical warning) and, for SATA drives, the SMART attributes (reallocated, pending and uncorrectable sectors, cable CRC errors, start/stop and head load cycles, threshold check).
+- The "Create a partition" action showed an empty square instead of its icon (the character was missing from the interface fonts).
 
 ## [0.1.0] - 2026-11-19
 

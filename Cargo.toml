@@ -1,6 +1,6 @@
 [package]
 name = "diskcraft"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "DiskCraft - gestionnaire de disques et de partitions libre et gratuit"
 license = "GPL-3.0-or-later"
