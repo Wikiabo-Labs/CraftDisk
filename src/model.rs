@@ -333,6 +333,22 @@ pub struct Health {
     pub load_unload_cycles: Option<u64>,
     /// The drive's SMART "failure predicted" flag (SATA/SAS drives).
     pub predict_failure: Option<bool>,
+    // Read straight from the drive (NVMe health log or ATA SMART attributes).
+    pub available_spare: Option<u32>,
+    pub available_spare_threshold: Option<u32>,
+    /// NVMe critical warning bits (0 = none).
+    pub critical_warning: Option<u8>,
+    pub power_cycles: Option<u64>,
+    pub unsafe_shutdowns: Option<u64>,
+    pub media_errors: Option<u64>,
+    pub error_log_entries: Option<u64>,
+    /// Bytes read / written over the drive's life.
+    pub data_read: Option<u64>,
+    pub data_written: Option<u64>,
+    pub reallocated: Option<u64>,
+    pub pending: Option<u64>,
+    pub uncorrectable: Option<u64>,
+    pub crc_errors: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -346,10 +362,16 @@ pub enum HealthLevel {
 impl Health {
     /// Overall verdict: the worst of Windows' status, the SMART prediction and the counters.
     pub fn level(&self) -> HealthLevel {
-        let uncorrected = self.read_errors_uncorrected.unwrap_or(0) + self.write_errors_uncorrected.unwrap_or(0);
-        if self.status.eq_ignore_ascii_case("Unhealthy") || self.predict_failure == Some(true) || uncorrected > 0 {
+        let uncorrected = self.read_errors_uncorrected.unwrap_or(0) + self.write_errors_uncorrected.unwrap_or(0) + self.uncorrectable.unwrap_or(0) + self.pending.unwrap_or(0);
+        let spare_low = matches!((self.available_spare, self.available_spare_threshold), (Some(a), Some(t)) if t > 0 && a < t);
+        if self.status.eq_ignore_ascii_case("Unhealthy") || self.predict_failure == Some(true) || self.critical_warning.is_some_and(|c| c != 0) || uncorrected > 0 || spare_low {
             HealthLevel::Bad
-        } else if self.status.eq_ignore_ascii_case("Warning") || self.wear.is_some_and(|w| w >= 90) || self.temperature.is_some_and(|t| t >= 70) {
+        } else if self.status.eq_ignore_ascii_case("Warning")
+            || self.wear.is_some_and(|w| w >= 90)
+            || self.temperature.is_some_and(|t| t >= 70)
+            || self.reallocated.is_some_and(|r| r > 0)
+            || self.media_errors.is_some_and(|m| m > 0)
+        {
             HealthLevel::Warning
         } else if self.status.eq_ignore_ascii_case("Healthy") {
             HealthLevel::Good
@@ -359,6 +381,6 @@ impl Health {
     }
     /// Whether any SMART counter was reported (Windows hides them without administrator rights).
     pub fn has_counters(&self) -> bool {
-        self.temperature.is_some() || self.wear.is_some() || self.power_on_hours.is_some() || self.read_errors.is_some() || self.write_errors.is_some()
+        self.temperature.is_some() || self.wear.is_some() || self.power_on_hours.is_some() || self.read_errors.is_some() || self.write_errors.is_some() || self.power_cycles.is_some()
     }
 }

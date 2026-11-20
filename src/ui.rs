@@ -1564,7 +1564,6 @@ impl App {
             });
             ui.add_space(8.0);
         }
-        let none = || "—".to_string();
         for d in self.base.iter() {
             let h = self.health.get(&d.number);
             ui.add_space(4.0);
@@ -1585,46 +1584,60 @@ impl App {
                     return;
                 };
                 ui.add_space(4.0);
-                let hours = |v: Option<u64>| v.map(|h| crate::trf!("{} h ({} jours)", "{} h ({} days)", h, h / 24)).unwrap_or_else(none);
-                let count = |v: Option<u64>| v.map(|n| n.to_string()).unwrap_or_else(none);
-                let errors = |total: Option<u64>, unc: Option<u64>| match (total, unc) {
-                    (None, None) => none(),
-                    (t, u) => crate::trf!("{} (non corrigées : {})", "{} (uncorrected: {})", count(t), count(u)),
+                // Only what this drive reports: a missing value is left out rather than shown as "—".
+                let mut rows: Vec<(&str, String, Option<Color32>)> = Vec::new();
+                let mut row = |k: &'static str, v: Option<String>, c: Option<Color32>| {
+                    if let Some(v) = v {
+                        rows.push((k, v, c));
+                    }
                 };
-                let rows: Vec<(&str, String, Option<Color32>)> = vec![
-                    (crate::tr!("État Windows", "Windows status"), if h.status.is_empty() { none() } else { format!("{} · {}", h.status, h.operational) }, None),
-                    (crate::tr!("Type", "Type"), format!("{} · {}", if h.media.is_empty() { "?" } else { &h.media }, if h.bus.is_empty() { &d.bus } else { &h.bus }), None),
-                    (
-                        crate::tr!("Température", "Temperature"),
-                        match (h.temperature, h.temperature_max) {
-                            (Some(t), Some(m)) => crate::trf!("{} °C (max. {} °C)", "{} °C (max {} °C)", t, m),
-                            (Some(t), None) => format!("{t} °C"),
-                            _ => none(),
-                        },
-                        h.temperature.filter(|&t| t >= 70).map(|_| PENDING),
-                    ),
-                    (
-                        crate::tr!("Usure (SSD)", "Wear (SSD)"),
-                        h.wear.map(|w| crate::trf!("{} % utilisés · {} % de durée de vie restante", "{} % used · {} % life left", w, 100u32.saturating_sub(w))).unwrap_or_else(none),
-                        h.wear.filter(|&w| w >= 90).map(|_| PENDING),
-                    ),
-                    (crate::tr!("Heures de fonctionnement", "Power-on hours"), hours(h.power_on_hours), None),
-                    (crate::tr!("Erreurs de lecture", "Read errors"), errors(h.read_errors, h.read_errors_uncorrected), h.read_errors_uncorrected.filter(|&n| n > 0).map(|_| DANGER)),
-                    (crate::tr!("Erreurs d'écriture", "Write errors"), errors(h.write_errors, h.write_errors_uncorrected), h.write_errors_uncorrected.filter(|&n| n > 0).map(|_| DANGER)),
-                    (crate::tr!("Démarrages / arrêts", "Start / stop cycles"), count(h.start_stop_cycles), None),
-                    (crate::tr!("Cycles de tête (HDD)", "Head load cycles (HDD)"), count(h.load_unload_cycles), None),
-                    (
-                        crate::tr!("Prédiction SMART", "SMART prediction"),
-                        match h.predict_failure {
-                            Some(true) => crate::tr!("Panne prévue par le disque", "Failure predicted by the drive").to_string(),
-                            Some(false) => crate::tr!("Aucune panne prévue", "No failure predicted").to_string(),
-                            None => none(),
-                        },
-                        h.predict_failure.filter(|&p| p).map(|_| DANGER),
-                    ),
-                    (crate::tr!("Firmware", "Firmware"), if h.firmware.is_empty() { none() } else { h.firmware.clone() }, None),
-                    (crate::tr!("Numéro de série", "Serial number"), if h.serial.is_empty() { none() } else { h.serial.clone() }, None),
-                ];
+                let alert = |bad: bool, c: Color32| if bad { Some(c) } else { None };
+                row(crate::tr!("État Windows", "Windows status"), (!h.status.is_empty()).then(|| format!("{} · {}", h.status, h.operational)), None);
+                row(crate::tr!("Type", "Type"), Some(format!("{} · {}", if h.media.is_empty() { "?" } else { &h.media }, if h.bus.is_empty() { &d.bus } else { &h.bus })), None);
+                row(
+                    crate::tr!("Température", "Temperature"),
+                    h.temperature.map(|t| match h.temperature_max {
+                        Some(m) => crate::trf!("{} °C (max. {} °C)", "{} °C (max {} °C)", t, m),
+                        None => format!("{t} °C"),
+                    }),
+                    alert(h.temperature.is_some_and(|t| t >= 70), PENDING),
+                );
+                row(
+                    crate::tr!("Usure (SSD)", "Wear (SSD)"),
+                    h.wear.map(|w| crate::trf!("{} % utilisés · {} % de durée de vie restante", "{} % used · {} % life left", w, 100u32.saturating_sub(w))),
+                    alert(h.wear.is_some_and(|w| w >= 90), PENDING),
+                );
+                row(
+                    crate::tr!("Réserve disponible", "Available spare"),
+                    h.available_spare.map(|a| match h.available_spare_threshold {
+                        Some(t) => crate::trf!("{} % (seuil {} %)", "{} % (threshold {} %)", a, t),
+                        None => format!("{a} %"),
+                    }),
+                    alert(matches!((h.available_spare, h.available_spare_threshold), (Some(a), Some(t)) if t > 0 && a < t), DANGER),
+                );
+                row(crate::tr!("Heures de fonctionnement", "Power-on hours"), h.power_on_hours.map(|v| crate::trf!("{} h ({} jours)", "{} h ({} days)", v, v / 24)), None);
+                row(crate::tr!("Mises sous tension", "Power cycles"), h.power_cycles.map(|v| v.to_string()), None);
+                row(crate::tr!("Arrêts brutaux", "Unsafe shutdowns"), h.unsafe_shutdowns.map(|v| v.to_string()), None);
+                row(crate::tr!("Données lues", "Data read"), h.data_read.map(fmt_size), None);
+                row(crate::tr!("Données écrites", "Data written"), h.data_written.map(fmt_size), None);
+                row(crate::tr!("Erreurs média / intégrité", "Media / integrity errors"), h.media_errors.map(|v| v.to_string()), alert(h.media_errors.is_some_and(|v| v > 0), PENDING));
+                row(crate::tr!("Entrées du journal d'erreurs", "Error log entries"), h.error_log_entries.map(|v| v.to_string()), None);
+                row(crate::tr!("Secteurs réalloués", "Reallocated sectors"), h.reallocated.map(|v| v.to_string()), alert(h.reallocated.is_some_and(|v| v > 0), PENDING));
+                row(crate::tr!("Secteurs en attente", "Pending sectors"), h.pending.map(|v| v.to_string()), alert(h.pending.is_some_and(|v| v > 0), DANGER));
+                row(crate::tr!("Secteurs irrécupérables", "Uncorrectable sectors"), h.uncorrectable.map(|v| v.to_string()), alert(h.uncorrectable.is_some_and(|v| v > 0), DANGER));
+                row(crate::tr!("Erreurs de câble (CRC)", "Cable errors (CRC)"), h.crc_errors.map(|v| v.to_string()), alert(h.crc_errors.is_some_and(|v| v > 0), PENDING));
+                let errors = |t: Option<u64>, u: Option<u64>| t.map(|t| crate::trf!("{} (non corrigées : {})", "{} (uncorrected: {})", t, u.unwrap_or(0)));
+                row(crate::tr!("Erreurs de lecture", "Read errors"), errors(h.read_errors, h.read_errors_uncorrected), alert(h.read_errors_uncorrected.is_some_and(|n| n > 0), DANGER));
+                row(crate::tr!("Erreurs d'écriture", "Write errors"), errors(h.write_errors, h.write_errors_uncorrected), alert(h.write_errors_uncorrected.is_some_and(|n| n > 0), DANGER));
+                row(crate::tr!("Démarrages / arrêts", "Start / stop cycles"), h.start_stop_cycles.map(|v| v.to_string()), None);
+                row(crate::tr!("Cycles de tête (HDD)", "Head load cycles (HDD)"), h.load_unload_cycles.map(|v| v.to_string()), None);
+                row(
+                    crate::tr!("Prédiction SMART", "SMART prediction"),
+                    h.predict_failure.map(|p| if p { crate::tr!("Panne prévue par le disque", "Failure predicted by the drive").to_string() } else { crate::tr!("Aucune panne prévue", "No failure predicted").to_string() }),
+                    alert(h.predict_failure == Some(true), DANGER),
+                );
+                row(crate::tr!("Firmware", "Firmware"), (!h.firmware.is_empty()).then(|| h.firmware.clone()), None);
+                row(crate::tr!("Numéro de série", "Serial number"), (!h.serial.is_empty()).then(|| h.serial.trim_end_matches('.').to_string()), None);
                 egui::Grid::new(("health", d.number)).num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
                     for (k, v, c) in rows {
                         ui.label(RichText::new(k).color(MUTED()));
