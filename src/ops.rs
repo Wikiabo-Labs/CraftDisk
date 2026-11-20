@@ -581,11 +581,7 @@ impl Op {
                 let al = a.letter.ok_or(crate::tr!("lettre", "drive letter"))?;
                 let mut s = String::from("# Fusionner deux partitions\n");
                 if let Some(bl) = b.letter {
-                    let folder = crate::trf!("{al}:\\Contenu de {bl}", "{al}:\\Contents of {bl}");
-                    s += &format!(
-                        "robocopy {bl}:\\ {} /E /COPY:DAT /XJ /R:1 /W:1 /NP /XD 'System Volume Information' '$RECYCLE.BIN'\nif ($LASTEXITCODE -ge 8) {{ throw 'La copie du contenu a échoué.' }}\n",
-                        ps_quote(&folder)
-                    );
+                    s += &merge_copy_script(al, bl);
                 }
                 s += &format!("Remove-Partition -DiskNumber {disk} -PartitionNumber {} -Confirm:$false\n", pn(*disk, b.offset));
                 s += &format!("Resize-Partition -DiskNumber {disk} -PartitionNumber {} -Size {}", pn(*disk, a.offset), b.end() - a.offset);
@@ -749,6 +745,77 @@ fn format_steps(before: &[Disk], disk: u32, offset: u64, size: u64, fs: &Fs, lab
     vec![Step::Ps { script: s }]
 }
 
+/// Copies every file of `src:` to the root of `dst:` before the merge deletes `src:`.
+/// Files whose name is already used on `dst:` are copied as `name-HH-mm-ss-dd-MM-yyyy.ext`.
+/// Nothing is deleted unless every file is found on `dst:` with its size.
+fn merge_copy_script(dst: char, src: char) -> String {
+    let msgs = [
+        ("__M_COPY_FAILED__", crate::tr!("La copie du contenu a échoué : rien n'a été supprimé.", "Copying the contents failed: nothing was deleted.")),
+        ("__M_RENAMED__", crate::tr!("Renommé (nom déjà utilisé) : ", "Renamed (name already used): ")),
+        ("__M_MISSING__", crate::tr!("Manquant : ", "Missing: ")),
+        ("__M_NOT_COPIED__", crate::tr!(" fichier(s) n'ont pas été copiés : la seconde partition n'est pas supprimée.", " file(s) were not copied: the second partition is not deleted.")),
+        ("__M_FOLDER_CLASH__", crate::tr!("Un fichier porte le nom d'un dossier à copier : ", "A file has the name of a folder to copy: ")),
+        ("__M_DONE__", crate::tr!(" fichier(s) copiés, dont renommés : ", " file(s) copied, renamed: ")),
+    ];
+    let mut s = r#"$src = '__SRC__:\'
+$dst = '__DST__:\'
+$stamp = Get-Date -Format 'HH-mm-ss-dd-MM-yyyy'
+$skip = @('System Volume Information', '$RECYCLE.BIN')
+$files = New-Object System.Collections.Generic.List[object]
+$xd = New-Object System.Collections.Generic.List[string]
+foreach ($s in $skip) { $xd.Add((Join-Path $src $s)) }
+# 1. Files of the second partition (Windows folders and links left out, as robocopy does).
+function Add-Files([string]$dir, [string]$rel) {
+  foreach ($e in @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
+    $r = if ($rel) { $rel + '\' + $e.Name } else { $e.Name }
+    if ($e.PSIsContainer) {
+      if (-not $rel -and $skip -contains $e.Name) { continue }
+      if ($e.Attributes -band [IO.FileAttributes]::ReparsePoint) { $xd.Add($e.FullName); continue }
+      Add-Files $e.FullName $r
+    } else {
+      $files.Add([pscustomobject]@{ Rel = $r; Size = $e.Length; Full = $e.FullName; Dest = (Join-Path $dst $r) })
+    }
+  }
+}
+Add-Files $src ''
+# ...and the ones whose name is already used on the first partition.
+$clash = @($files | Where-Object { Test-Path -LiteralPath $_.Dest })
+# 2. Everything else: robocopy leaves out every file that already exists on the first partition.
+robocopy $src $dst /E /COPY:DAT /DCOPY:T /XJ /R:1 /W:1 /NP /NFL /NDL /XC /XN /XO /XD $xd.ToArray() | Out-Null
+if ($LASTEXITCODE -ge 8) { throw (__M_COPY_FAILED__) }
+# 3. Same names: the copy gets the date and time in its name.
+foreach ($f in $clash) {
+  $dir = Split-Path -Parent $f.Dest
+  if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw ((__M_FOLDER_CLASH__) + $f.Rel) }
+  $base = [IO.Path]::GetFileNameWithoutExtension($f.Dest)
+  $ext = [IO.Path]::GetExtension($f.Dest)
+  $new = Join-Path $dir ($base + '-' + $stamp + $ext)
+  $n = 1
+  while (Test-Path -LiteralPath $new) { $new = Join-Path $dir ($base + '-' + $stamp + '-' + $n + $ext); $n++ }
+  Copy-Item -LiteralPath $f.Full -Destination $new -Force
+  $f.Dest = $new
+  Write-Output ((__M_RENAMED__) + $f.Rel + ' -> ' + (Split-Path -Leaf $new))
+}
+# 4. Every file must be on the first partition, with its size, before anything is deleted.
+$missing = 0
+foreach ($f in $files) {
+  $i = Get-Item -LiteralPath $f.Dest -Force -ErrorAction SilentlyContinue
+  if (-not $i -or $i.PSIsContainer -or $i.Length -ne $f.Size) {
+    $missing++
+    if ($missing -le 20) { Write-Output ((__M_MISSING__) + $f.Rel) }
+  }
+}
+if ($missing -gt 0) { throw ([string]$missing + (__M_NOT_COPIED__)) }
+Write-Output ([string]$files.Count + (__M_DONE__) + [string]$clash.Count)
+"#
+    .replace("__SRC__", &src.to_string())
+    .replace("__DST__", &dst.to_string());
+    for (k, v) in msgs {
+        s = s.replace(k, &ps_quote(v));
+    }
+    s
+}
+
 fn dynamic_to_basic_script(disk: u32, temp: char) -> String {
     format!(
         r#"# Convertir le disque dynamique {disk} en disque de base
@@ -802,5 +869,47 @@ pub fn check_steps(d: &Disk, p: &Partition, mode: usize) -> Vec<Step> {
         0 => vec![Step::Ps { script: format!("# Rechercher les erreurs\nRepair-Volume {target} -Scan") }],
         1 => vec![Step::Ps { script: format!("# Vérifier et réparer les erreurs\nRepair-Volume {target} -OfflineScanAndFix") }],
         _ => vec![Step::SurfaceTest { disk: d.number, offset: p.offset, size: p.size, sector: d.sector }],
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::merge_copy_script;
+
+    /// Runs the merge copy between two temporary folders: files go to the root of the first one,
+    /// a file with a name already used gets the date and time in its name.
+    #[test]
+    fn merge_copy_renames_same_names() {
+        let root = std::env::temp_dir().join(format!("diskcraft-merge-test-{}", std::process::id()));
+        let (src, dst) = (root.join("src"), root.join("dst"));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::create_dir_all(dst.join("sub")).unwrap();
+        std::fs::write(src.join("test.txt"), "from second partition").unwrap();
+        std::fs::write(src.join("only-src.txt"), "x").unwrap();
+        std::fs::write(src.join("sub").join("deep.txt"), "deep").unwrap();
+        std::fs::write(dst.join("test.txt"), "already on first partition").unwrap();
+
+        let script = merge_copy_script('Y', 'Z')
+            .replace(r"$src = 'Z:\'", &format!(r"$src = '{}\'", src.display()))
+            .replace(r"$dst = 'Y:\'", &format!(r"$dst = '{}\'", dst.display()));
+        let mut out = Vec::new();
+        let r = crate::worker::run_ps_file(&script, &mut |l| out.push(l.to_string()));
+        assert!(r.is_ok(), "script failed: {r:?}\n{}", out.join("\n"));
+
+        assert_eq!(std::fs::read_to_string(dst.join("test.txt")).unwrap(), "already on first partition");
+        assert!(dst.join("only-src.txt").exists());
+        assert!(dst.join("sub").join("deep.txt").exists());
+        let renamed: Vec<_> = std::fs::read_dir(&dst)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with("test-") && n.ends_with(".txt"))
+            .collect();
+        assert_eq!(renamed.len(), 1, "files: {renamed:?}");
+        // test-HH-mm-ss-dd-MM-yyyy.txt
+        assert_eq!(renamed[0].len(), "test-11-23-25-20-11-2026.txt".len());
+        assert_eq!(std::fs::read_to_string(dst.join(&renamed[0])).unwrap(), "from second partition");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
