@@ -1851,7 +1851,7 @@ impl App {
                     if let (Some(i), Some(j)) = (d.part_at(*first), d.next_part(*first)) {
                         ui.label(crate::trf!("{} et {} deviendront une seule partition de {}.", "{} and {} will become a single {} partition.", d.parts[i].title(), d.parts[j].title(), fmt_size(d.parts[j].end() - d.parts[i].offset)));
                         if let Some(l) = d.parts[j].letter {
-                            ui.label(crate::trf!("Le contenu de {l}: sera copié dans le dossier « Contenu de {l} » de la première partition.", "The contents of {l}: will be copied into the folder \"Contents of {l}\" on the first partition."));
+                            ui.label(crate::trf!("Les fichiers de {l}: seront copiés à la racine de la première partition. Un fichier dont le nom existe déjà y sera renommé avec la date et l'heure (ex. test-11-23-25-20-11-2026.txt). {l}: n'est supprimée qu'une fois tous ses fichiers vérifiés.", "The files of {l}: will be copied to the root of the first partition. A file whose name already exists there is renamed with the date and time (e.g. test-11-23-25-20-11-2026.txt). {l}: is deleted only once all its files are checked."));
                         }
                     }
                 }
